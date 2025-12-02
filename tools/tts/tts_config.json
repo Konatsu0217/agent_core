@@ -1,0 +1,62 @@
+{
+  "newtts": {
+    "xiaoyi": {
+      "engine": "edgetts",
+      "edgettsLanguage": "zh-CN",
+      "edgettsVoice": "XiaoyiNeural",
+      "edgettsRate": 1.0
+    },
+    "xiaoxiao": {
+      "engine": "edgetts",
+      "edgettsLanguage": "zh-CN",
+      "edgettsVoice": "XiaoxiaoNeural",
+      "edgettsRate": 1.2
+    },
+    "custom_voice_1": {
+      "engine": "customTTS",
+      "customTTSserver": "http://127.0.0.1:9880\nhttp://127.0.0.1:9881\nhttp://127.0.0.1:9882",
+      "customTTSspeaker": "speaker_001",
+      "customTTSspeed": 1.0
+    },
+    "gsv_voice": {
+      "engine": "GSV",
+      "gsvServer": "http://127.0.0.1:9880\nhttp://127.0.0.1:9881",
+      "gsvRefAudioPath": "reference_audio.wav",
+      "gsvTextLang": "zh",
+      "gsvPromptLang": "zh",
+      "gsvPromptText": "参考文本内容",
+      "gsvRate": 1.0
+    },
+    "openai_voice": {
+      "engine": "openai",
+      "api_key": "8d205783-9ac2-49ca-948b-40cbb551b254",
+      "model": "tts-1",
+      "openaiVoice": "alloy",
+      "openaiSpeed": 1.0,
+      "base_url": "https://openspeech.bytedance.com/api/v1/tts",
+      "gsvPromptText": "",
+      "gsvRefAudioPath": ""
+    }
+  },
+  
+  "edgettsLanguage": "zh-CN",
+  "edgettsVoice": "XiaoyiNeural",
+  "edgettsRate": 1.0,
+  
+  "customTTSserver": "http://127.0.0.1:9880",
+  "customTTSspeaker": "default_speaker",
+  "customTTSspeed": 1.0,
+  
+  "gsvServer": "http://127.0.0.1:9880",
+  "gsvRefAudioPath": "uploads/reference.wav",
+  "gsvTextLang": "zh",
+  "gsvPromptLang": "zh",
+  "gsvPromptText": "",
+  "gsvRate": 1.0,
+  
+  "api_key": "",
+  "model": "tts-1",
+  "openaiVoice": "alloy",
+  "openaiSpeed": 1.0,
+  "base_url": "https://api.openai.com/v1"
+}
