@@ -1,8 +1,10 @@
 import json
 
 from event_bus import EventBus
+
+from utils.config_manager import ConfigManager
 from utils.logger import get_logger
-from utils.tts_engines import EdgeTTSEngine, CustomTTSEngine, GSVEngine, OpenAITTSEngine
+from tools.tts.tts_engines import EdgeTTSEngine, CustomTTSEngine, GSVEngine, OpenAITTSEngine
 
 # 配置常量
 TTS_CONFIG_FILE = "tools/tts/tts_config.json"
@@ -74,3 +76,8 @@ def get_default_tts_config():
 
 # 加载配置
 tts_config = load_tts_config()
+
+global_config = ConfigManager.get_config()
+core_server_config = global_config.get_server_config()
+backbone_llm_config = global_config.get_backbone_llm_config()
+
