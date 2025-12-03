@@ -9,6 +9,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 
 import global_statics
+from clients.llm_client import LLMClientManager
 from utils.config_manager import ConfigManager
 from global_statics import logger, eventBus
 

@@ -78,6 +78,6 @@ def get_default_tts_config():
 tts_config = load_tts_config()
 
 global_config = ConfigManager.get_config()
-core_server_config = global_config.get_server_config()
-backbone_llm_config = global_config.get_backbone_llm_config()
+core_server_config = ConfigManager.get_server_config()
+backbone_llm_config = ConfigManager.get_backbone_config()
 

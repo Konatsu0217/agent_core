@@ -11,7 +11,7 @@ class ConfigManager:
     _raw_config: Dict[str, Any] = None
 
     @classmethod
-    def load_config(cls, config_path='./core_config.json'):
+    def load_config(cls, config_path='/Users/bytedance/Desktop/explore_tech/agent_repo/agent_core/core_config.json'):
         """加载配置文件"""
         try:
             with open(config_path, 'r', encoding='utf-8') as f:

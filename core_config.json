@@ -8,9 +8,11 @@
     "timeout_keep_alive": 5
   },
   "backbone_llm_config": {
-    "openapi_url": "https://api.openai.com/v1",
-    "openapi_key": "8d205783-9ac2-49ca-948b-40cbb551b254",
-    "model_name": "tts-1"
+    "openapi_url": "https://api.siliconflow.cn/v1",
+    "openapi_key": "sk-xiwngzsyvwvqnoduwjfmvrnzxabruihbshhetdxjvtworuaa",
+    "model_name": "Qwen/Qwen3-14B",
+    "temperature": 0.7,
+    "max_tokens": 1024
   },
   "pe_config": {
     "url": "http://127.0.0.1:25535"

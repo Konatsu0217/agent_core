@@ -1,9 +1,9 @@
 """
 LLM客户端，用于与各种大语言模型服务进行交互
+基于 OpenAI 官方客户端封装
 """
 
-import httpx
-import json
+from openai import AsyncOpenAI
 from typing import List, Dict, Any, Optional
 
 import global_statics
@@ -12,29 +12,35 @@ from global_statics import logger
 
 class LLMClient:
     """LLM客户端，支持基本的聊天完成请求"""
-    
+
     def __init__(self, backbone_llm_config=None):
         """
         初始化LLM客户端
-        
+
         Args:
             backbone_llm_config: Backbone LLM配置，如果为None则使用config中的配置
         """
         if backbone_llm_config is None:
             backbone_llm_config = global_statics.backbone_llm_config
-            
+
         self.config = backbone_llm_config
-        self.base_url = backbone_llm_config.openapi_url
-        self.timeout = backbone_llm_config.timeout
-        self.session = httpx.AsyncClient(timeout=self.timeout)
-        self.api_key = backbone_llm_config.openapi_key
-        self.model_name = backbone_llm_config.model_name
-        
+        self.base_url = backbone_llm_config['openapi_url']
+        self.api_key = backbone_llm_config['openapi_key']
+        self.model_name = backbone_llm_config['model_name']
+        self.timeout = backbone_llm_config.get('timeout', 30)
+
+        # 初始化 OpenAI 客户端
+        self.client = AsyncOpenAI(
+            api_key=self.api_key,
+            base_url=self.base_url,
+            timeout=self.timeout
+        )
+
         logger.info(f"LLMClient初始化完成，使用模型: {self.model_name}, base_url: {self.base_url}")
-    
+
     async def chat_completion(
-        self, 
-        messages: List[Dict[str, str]], 
+        self,
+        messages: List[Dict[str, str]],
         model: str = None,
         temperature: float = None,
         max_tokens: Optional[int] = None,
@@ -44,7 +50,7 @@ class LLMClient:
     ) -> Dict[str, Any]:
         """
         发送聊天完成请求
-        
+
         Args:
             messages: 消息列表，格式为 [{"role": "user", "content": "你好"}]
             model: 使用的模型名称，如果为None则使用配置中的模型
@@ -53,7 +59,7 @@ class LLMClient:
             tools: 工具定义列表
             tool_choice: 工具选择策略
             **kwargs: 其他参数
-            
+
         Returns:
             响应数据字典
         """
@@ -62,118 +68,86 @@ class LLMClient:
             if model is None:
                 model = self.model_name
             if temperature is None:
-                temperature = self.config.temperature
+                temperature = self.config['temperature']
             if max_tokens is None:
-                max_tokens = self.config.max_tokens
-                
-            payload = {
+                max_tokens = self.config.get('max_tokens')
+
+            # 构建请求参数
+            request_params = {
                 "model": model,
                 "messages": messages,
                 "temperature": temperature,
                 **kwargs
             }
-            
+
             if max_tokens:
-                payload["max_tokens"] = max_tokens
-                
+                request_params["max_tokens"] = max_tokens
+
             if tools:
-                payload["tools"] = tools
-                
+                request_params["tools"] = tools
+
             if tool_choice:
-                payload["tool_choice"] = tool_choice
-            
+                request_params["tool_choice"] = tool_choice
+
             logger.info(f"发送聊天请求，模型: {model}, 消息数: {len(messages)}")
-            
-            response = await self._make_request(payload)
-            
-            logger.info(f"收到响应，使用token: {response.get('usage', {})}")
-            return response
-            
+
+            # 使用 OpenAI 客户端发送请求
+            response = await self.client.chat.completions.create(**request_params)
+
+            # 将响应转换为字典格式
+            result = response.model_dump()
+
+            logger.info(f"收到响应，使用token: {result.get('usage', {})}")
+            return result
+
         except Exception as e:
             logger.error(f"聊天请求失败: {str(e)}")
             raise
-    
-    async def _make_request(self, payload: Dict[str, Any]) -> Dict[str, Any]:
-        """
-        发送HTTP请求到LLM服务
-        
-        Args:
-            payload: 请求负载
-            
-        Returns:
-            响应数据
-        """
-        url = f"{self.base_url}/v1/chat/completions"
-        
-        headers = {
-            "Content-Type": "application/json",
-            "Accept": "application/json"
-        }
-        
-        # 如果有API密钥，添加到请求头
-        if self.api_key:
-            headers["Authorization"] = f"Bearer {self.api_key}"
-        
-        try:
-            logger.debug(f"请求URL: {url}")
-            logger.debug(f"请求负载: {json.dumps(payload, ensure_ascii=False, indent=2)}")
-            
-            response = await self.session.post(url, json=payload, headers=headers)
-            response.raise_for_status()
-            
-            result = response.json()
-            logger.debug(f"响应数据: {json.dumps(result, ensure_ascii=False, indent=2)[:500]}...")
-            
-            return result
-            
-        except httpx.HTTPStatusError as e:
-            logger.error(f"HTTP错误 {e.response.status_code}: {e.response.text}")
-            raise Exception(f"LLM服务返回错误: {e.response.status_code}")
-            
-        except httpx.RequestError as e:
-            logger.error(f"请求错误: {str(e)}")
-            raise Exception(f"无法连接到LLM服务: {str(e)}")
-            
-        except json.JSONDecodeError as e:
-            logger.error(f"JSON解析错误: {str(e)}")
-            raise Exception(f"LLM服务返回格式错误: {str(e)}")
-    
+
     def sync_chat_completion(self, *args, **kwargs) -> Dict[str, Any]:
-        """
-        同步版本的聊天完成请求
-        
-        Args:
-            *args, **kwargs: 与chat_completion相同的参数
-            
-        Returns:
-            响应数据字典
-        """
         import asyncio
-        return asyncio.run(self.chat_completion(*args, **kwargs))
-    
+        try:
+            loop = asyncio.get_event_loop()
+        except RuntimeError:
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+
+        return loop.run_until_complete(self.chat_completion(*args, **kwargs))
+
     async def close(self):
         """关闭客户端连接"""
-        await self.session.aclose()
+        await self.client.close()
         logger.info("LLMClient连接已关闭")
-    
+
     def __del__(self):
         """析构函数，尝试关闭连接"""
         try:
-            if hasattr(self, 'session') and self.session:
+            if hasattr(self, 'client') and self.client:
                 logger.debug("LLMClient实例销毁")
         except Exception:
             pass
 
 
-# 创建默认客户端实例
-def create_llm_client(backbone_config=None) -> LLMClient:
-    """
-    创建LLM客户端实例
-    
-    Args:
-        backbone_config: Backbone配置，如果为None则使用dataModel中的配置
-        
-    Returns:
-        LLMClient实例
-    """
-    return LLMClient(backbone_config=backbone_config)
+class LLMClientManager:
+    """LLM客户端管理器，管理多个LLM客户端实例"""
+
+    def __init__(self):
+        self.clientMap: Dict[str, LLMClient] = {}
+
+    def get_client(self, config=None) -> LLMClient:
+        if config is None:
+            config = global_statics.backbone_llm_config
+
+        client_key = f"{config['openapi_url']}_{config['model_name']}"
+
+        if client_key not in self.clientMap:
+            self.clientMap[client_key] = LLMClient(config)
+
+        return self.clientMap[client_key]
+
+    async def close_all(self):
+        """关闭所有客户端连接"""
+        for client in self.clientMap.values():
+            await client.close()
+        self.clientMap.clear()
+        logger.info("所有LLMClient连接已关闭")
