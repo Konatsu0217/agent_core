@@ -2,6 +2,7 @@
 LLM客户端，用于与各种大语言模型服务进行交互
 基于 OpenAI 官方客户端封装
 """
+import uuid
 
 from openai import AsyncOpenAI
 from typing import List, Dict, Any, Optional
@@ -13,15 +14,17 @@ from global_statics import logger
 class LLMClient:
     """LLM客户端，支持基本的聊天完成请求"""
 
-    def __init__(self, backbone_llm_config=None):
+    def __init__(self, client_key, backbone_llm_config=None):
         """
         初始化LLM客户端
 
         Args:
+            client_key: 客户端唯一标识，用于区分不同的客户端实例
             backbone_llm_config: Backbone LLM配置，如果为None则使用config中的配置
         """
         if backbone_llm_config is None:
             backbone_llm_config = global_statics.backbone_llm_config
+        self.client_key = client_key
 
         self.config = backbone_llm_config
         self.base_url = backbone_llm_config['openapi_url']
@@ -133,15 +136,17 @@ class LLMClientManager:
 
     def __init__(self):
         self.clientMap: Dict[str, LLMClient] = {}
+        # client会有更多的属性，其实这里的一个client在我的计划里类似于一个agent
+        # 通过uuid来区分不同agent，有独立的context, pe, rag, tool等等，比如说 视觉模型 --> 视觉client，后续再说
 
     def get_client(self, config=None) -> LLMClient:
         if config is None:
             config = global_statics.backbone_llm_config
 
-        client_key = f"{config['openapi_url']}_{config['model_name']}"
+        client_key = f"{config['model_name']}_{uuid.uuid1()}"
 
         if client_key not in self.clientMap:
-            self.clientMap[client_key] = LLMClient(config)
+            self.clientMap[client_key] = LLMClient(client_key)
 
         return self.clientMap[client_key]
 

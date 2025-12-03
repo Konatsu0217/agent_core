@@ -61,6 +61,9 @@ async def main():
     ready = after_pe_response.get("llm_request")
     print("\n" + "=" * 50)
     print("Stage 3: 调用llm，获得llm_response")
+
+    print("\n" + "=" * 50)
+    print(f"client_key: {backBoneLLMClient.client_key}")
     response = await backBoneLLMClient.chat_completion(
         messages=ready.get('messages', []),
         tools=ready.get('tools', [])
