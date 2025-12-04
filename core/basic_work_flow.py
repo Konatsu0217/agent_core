@@ -6,6 +6,49 @@ from clients.mcp_client import MCPHubClient
 from clients.pe_client import PEClient
 from global_statics import global_config
 
+async def async_get_pe_and_mcp_tools(peClient: PEClient, mcpClient: MCPHubClient):
+    # ✅ 统一创建 Task 对象
+    pe_task = asyncio.create_task(peClient.build_prompt(
+        session_id="test_session_001",
+        user_query="你好，请帮我执行这一段python程序print('hello world')",
+        request_id="test_request_001",
+        stream=False
+    ))
+
+    mcp_task = asyncio.create_task(mcpClient.get_tools())
+
+    # 并行执行
+    try:
+        results = await asyncio.wait_for(
+            asyncio.gather(pe_task, mcp_task, return_exceptions=True),
+            timeout=5
+        )
+
+        llm_request_response, tools = results
+
+        # ✅ 处理异常
+        if isinstance(llm_request_response, Exception):
+            print(f"❌ PE build_prompt failed: {llm_request_response}")
+            return
+
+        if isinstance(tools, Exception):
+            print(f"⚠️ MCPHubClient get_tools failed: {tools}")
+            tools = []
+
+        # ✅ 正确提取数据
+        llm_request = llm_request_response.get('llm_request', {})
+        messages = llm_request.get('messages', [])
+
+        print(f"✅ PE build_prompt messages: {messages}")
+        print(f"✅ Available tools: {tools}")
+        return messages, tools
+
+    except asyncio.TimeoutError:
+        print("❌ Timeout: PE or MCP request took too long")
+        return [], []
+    except Exception as e:
+        print(f"❌ Unexpected error: {e}")
+        return [], []
 
 async def main():
     print("\n" + "=" * 50)
@@ -28,31 +71,7 @@ async def main():
     
     print("\n" + "=" * 50)
     print("Stage 2: PE + MCP工具发现")
-
-    tasks = [peClient.build_prompt(
-        session_id="test_session_001",
-        user_query="你好，请帮我执行这一段python程序print('hello world')",
-        request_id="test_request_001",
-        stream=False
-    ), asyncio.create_task(mcpClient.get_tools())]
-
-    llm_request, tools = await asyncio.wait_for(
-        asyncio.gather(*tasks, return_exceptions=True),
-        timeout=5
-    )
-
-    # 处理异常结果
-    if isinstance(llm_request, Exception):
-        print(f"PE build_prompt failed: {llm_request}")
-        system_prompt = None
-    if isinstance(tools, Exception):
-        print(f"MCPHubClient get_tools failed: {tools}")
-        tools = []
-
-    messages = llm_request.get('llm_request', []).get('messages', [])
-
-    print(f"PE build_prompt messages: {messages}")
-    print(f"available tools: {tools}")
+    messages, tools = await async_get_pe_and_mcp_tools(peClient, mcpClient)
     
     print("\n" + "=" * 50)
     print("Stage 3: 调用llm，获得llm_response")
