@@ -81,7 +81,7 @@ build/
 *.whl
 # 文档构建产物
 docs/_build/
-*.md
+
 # 类型提示缓存
 .mypy_cache/
 .dmypy.json
