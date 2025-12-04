@@ -5,7 +5,7 @@ LLM客户端，用于与各种大语言模型服务进行交互
 import uuid
 
 from openai import AsyncOpenAI
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, AsyncGenerator
 
 import global_statics
 from global_statics import logger
@@ -107,15 +107,56 @@ class LLMClient:
             logger.error(f"聊天请求失败: {str(e)}")
             raise
 
-    def sync_chat_completion(self, *args, **kwargs) -> Dict[str, Any]:
-        import asyncio
+    async def chat_completion_stream(
+        self,
+        messages: List[Dict[str, str]],
+        model: str = None,
+        temperature: float = None,
+        max_tokens: Optional[int] = None,
+        tools: Optional[List[Dict[str, Any]]] = None,
+        tool_choice: Optional[str] = None,
+        **kwargs
+    ) -> AsyncGenerator[str, Any]:
         try:
-            loop = asyncio.get_event_loop()
-        except RuntimeError:
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
+            # 使用配置中的默认值
+            if model is None:
+                model = self.model_name
+            if temperature is None:
+                temperature = self.config['temperature']
+            if max_tokens is None:
+                max_tokens = self.config.get('max_tokens')
 
-        return loop.run_until_complete(self.chat_completion(*args, **kwargs))
+            # 构建请求参数
+            request_params = {
+                "model": model,
+                "messages": messages,
+                "temperature": temperature,
+                "stream": True,
+                **kwargs
+            }
+
+            if max_tokens:
+                request_params["max_tokens"] = max_tokens
+
+            if tools:
+                request_params["tools"] = tools
+
+            if tool_choice:
+                request_params["tool_choice"] = tool_choice
+
+            logger.info(f"发送聊天请求，模型: {model}, 消息数: {len(messages)}")
+
+            # AsyncOpenAI 流式生成
+            stream = await self.client.chat.completions.create(
+                **request_params,
+            )
+
+            async for chunk in stream:
+                yield chunk.model_dump_json()
+
+        except Exception as e:
+            logger.error(f"流式聊天请求失败: {e}")
+            raise
 
     async def close(self):
         """关闭客户端连接"""

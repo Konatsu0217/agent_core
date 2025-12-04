@@ -1,5 +1,8 @@
 import asyncio
+import time
+
 from clients.llm_client import LLMClientManager
+from clients.mcp_client import MCPHubClient
 from clients.pe_client import PEClient
 from global_statics import global_config
 
@@ -18,34 +21,64 @@ async def main():
     except Exception as e:
         print(f"❌ PE客户端连接失败: {e}")
         return
+
+    # 初始化mcp管理中心客户端
+    mcpClient = MCPHubClient(global_config['mcphub_url'])
+
     
     print("\n" + "=" * 50)
-    print("Stage 2: 调用pe，获得完整的llm_request")
-    try:
-        after_pe_response = await peClient.build_prompt(
-            session_id="test_session_001",
-            user_query="你好，请帮我执行这一段python程序print('hello world')",
-            request_id="test_request_001",
-            stream=False
-        )
-        ready = after_pe_response.get("llm_request")
-    except Exception as e:
-        print(f"❌ PE请求失败: {e}")
-        await peClient.close()
-        return
+    print("Stage 2: PE + MCP工具发现")
+
+    tasks = [peClient.build_prompt(
+        session_id="test_session_001",
+        user_query="你好，请帮我执行这一段python程序print('hello world')",
+        request_id="test_request_001",
+        stream=False
+    ), asyncio.create_task(mcpClient.get_tools())]
+
+    llm_request, tools = await asyncio.wait_for(
+        asyncio.gather(*tasks, return_exceptions=True),
+        timeout=5
+    )
+
+    # 处理异常结果
+    if isinstance(llm_request, Exception):
+        print(f"PE build_prompt failed: {llm_request}")
+        system_prompt = None
+    if isinstance(tools, Exception):
+        print(f"MCPHubClient get_tools failed: {tools}")
+        tools = []
+
+    messages = llm_request.get('llm_request', []).get('messages', [])
+
+    print(f"PE build_prompt messages: {messages}")
+    print(f"available tools: {tools}")
     
     print("\n" + "=" * 50)
     print("Stage 3: 调用llm，获得llm_response")
-
-    print("\n" + "=" * 50)
-    print(f"client_key: {backBoneLLMClient.client_key}")
+    print(f"非流式 client_key: {backBoneLLMClient.client_key}")
     response = await backBoneLLMClient.chat_completion(
-        messages=ready.get('messages', []),
-        tools=ready.get('tools', [])
+        messages=messages,
+        tools=tools
     )
+
     print("\n" + "=" * 50)
     print("Stage 4: llm_response输出")
     print(response)
+
+
+    # print("\n" + "=" * 50)
+    # print(f"流式 client_key: {backBoneLLMClient.client_key}")
+    # start_time = time.time()
+    # async for delta in backBoneLLMClient.chat_completion_stream(
+    #     messages=ready.get('messages', []),
+    #     tools=ready.get('tools', [])
+    # ):
+    #     if(start_time != 0):
+    #         end_time = time.time()
+    #         print(f"首token耗时: {end_time - start_time} 秒")
+    #         start_time = 0
+    #     print(delta, end='\n')
     
     # 关闭PE客户端连接
     await peClient.close()
