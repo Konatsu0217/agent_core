@@ -2,6 +2,6 @@
 模型模块
 """
 
-from .data_model import data_model, BackboneConfig, DataModel
+from .agent_data_models import AgentRequest, AgentResponse
 
-__all__ = ['data_model', 'BackboneConfig', 'DataModel']
+__all__ = ['AgentRequest', 'AgentResponse']
