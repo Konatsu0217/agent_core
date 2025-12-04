@@ -197,3 +197,7 @@ class LLMClientManager:
             await client.close()
         self.clientMap.clear()
         logger.info("所有LLMClient连接已关闭")
+
+
+
+static_llmClientManager = LLMClientManager()

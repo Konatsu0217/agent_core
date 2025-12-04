@@ -10,6 +10,7 @@ from contextlib import asynccontextmanager
 
 import global_statics
 from clients.llm_client import LLMClientManager
+from models.agent_data_models import AgentRequest, AgentResponse
 from utils.config_manager import ConfigManager
 from global_statics import logger, eventBus
 
@@ -103,6 +104,14 @@ async def get_status():
         "status": "running",
         "tts_status": tts_status
     }
+
+# Todo: 调度器
+# orchestrator = AgentOrchestrator(settings)
+
+# @app.post("/agent/query")
+# async def handle_query(request: AgentRequest) -> AgentResponse:
+#     return await orchestrator.process_query(request)
+
 
 
 def main():

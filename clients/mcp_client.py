@@ -86,15 +86,16 @@ class MCPHubClient:
     # -----------------------
     async def call_tool(
         self,
-        tool: str,
-        arguments: Dict[str, Any],
+        id: str,
+        type: str,
+        function: Dict[str, Any],
         timeout: Optional[float] = None,
     ) -> Dict[str, Any]:
         """
         Synchronous-style tool call (POST /hub/call).
         Returns parsed JSON (dict) from the hub.
         """
-        payload = {"tool": tool, "arguments": arguments}
+        payload = {"id": id, "type": type, "function": function}
         json_body = {"json": payload}
         # allow override timeout per-call
         if timeout:
