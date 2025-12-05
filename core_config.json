@@ -1,6 +1,6 @@
 {
   "server": {
-    "port": 25535,
+    "port": 38888,
     "workers": 1,
     "limit_concurrency": 50,
     "backlog": 1024,

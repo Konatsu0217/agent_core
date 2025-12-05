@@ -82,5 +82,6 @@ global_config = ConfigManager.get_config()
 core_server_config = ConfigManager.get_server_config()
 backbone_llm_config = ConfigManager.get_backbone_config()
 
+# 临时使用的播放器（后续会根据需求调整）
 global_stream_audio_player = StreamingAudioPlayer()
 
