@@ -65,6 +65,14 @@ openapi_url = https://api.siliconflow.cn/v1 硅基流动的api
 
 openapi_key = 生成一个，别泄漏，扣钱的
 
+请创建一个 api.key 文件，里面写入openapi_key
+
+```json
+{
+    "openapi_key": "your-api-key"
+}
+```
+
 ### [PE server](https://github.com/Konatsu0217/agent_pe_server) /dev
 
 - 关注一下url和端口，运行main.py就行
