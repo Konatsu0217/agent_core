@@ -14,6 +14,7 @@ agent_core/
 │   ├── basic_work_flow.py .     # 最原始的agent流程
 │   ├── (WIP)orchestrator.py     # 🔥 调度器（核心）
 │   ├── (WIP)event_router.py     # 🔥 事件路由（Planning）
+│   │   ==== 这里的设计想法：一个core可以有多个agent，分别处理不同程度的query和任务，eg.视觉agent、文本agent ====
 │   ├── agent_interface.py       # 智能体接口
 │   ├── (WIP)fast_agent.py       # 快请求智能体实现
 │   └── (WIP)request_tracker.py  # 请求追踪器
@@ -35,7 +36,7 @@ agent_core/
 │   └── TBD                      # vrm还没补，依赖前端多
 │
 ├── handlers/                    # 特殊处理器
-│   ├── __init__.py
+│   ├── __init__.py              # 输出层到TTS/前端/Vrm/其他玩法
 │   ├── TBD                      # 工具调用集成在mcphub里了
 │   └── TBD                      # 流式响应处理器
 │
@@ -52,6 +53,25 @@ agent_core/
 ```
 
 ## 依赖
+
+### 外部openapi接口的LLM供应商
+推荐硅基流动，比较便宜，而且有赠送金，[硅基流动](https://cloud.siliconflow.cn/me/models)
+
+（我的[邀请链接](https://cloud.siliconflow.cn/i/zYdjNNQB)双赢白送2000万token❤️）
+
+model_name = 模型全名，去对应位置复制
+
+openapi_url = https://api.siliconflow.cn/v1 硅基流动的api
+
+openapi_key = 生成一个，别泄漏，扣钱的
+
+请创建一个 api.key 文件，里面写入openapi_key
+
+```json
+{
+    "openapi_key": "your-api-key"
+}
+```
 
 ### [PE server](https://github.com/Konatsu0217/agent_pe_server) /dev
 

@@ -9,7 +9,7 @@
   },
   "backbone_llm_config": {
     "openapi_url": "https://api.siliconflow.cn/v1",
-    "openapi_key": "sk-xiwngzsyvwvqnoduwjfmvrnzxabruihbshhetdxjvtworuaa",
+    "openapi_key": "",
     "model_name": "Qwen/Qwen3-14B",
     "temperature": 0.7,
     "max_tokens": 1024

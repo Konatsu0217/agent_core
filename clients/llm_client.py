@@ -180,11 +180,11 @@ class LLMClientManager:
         # client会有更多的属性，其实这里的一个client在我的计划里类似于一个agent
         # 通过uuid来区分不同agent，有独立的context, pe, rag, tool等等，比如说 视觉模型 --> 视觉client，后续再说
 
-    def get_client(self, config=None) -> LLMClient:
+    def get_client(self, name: str=None, config=None) -> LLMClient:
         if config is None:
             config = global_statics.backbone_llm_config
 
-        client_key = f"{config['model_name']}_{uuid.uuid1()}"
+        client_key = f"{name}_{config['model_name']}_{uuid.uuid1()}"
 
         if client_key not in self.clientMap:
             self.clientMap[client_key] = LLMClient(client_key)

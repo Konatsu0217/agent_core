@@ -44,6 +44,11 @@ class ConfigManager:
                 # MCP Hub配置
                 'mcphub_url': config_data['mcphub_config']['url'],
             }
+
+            if cls._config['backbone_llm_openapi_key'] == "":
+                cls._config['backbone_llm_openapi_key'] = json.load(open('/Users/bytedance/Desktop/explore_tech/agent_repo/agent_core/api.key', 'r'))['openapi_key']
+                config_data['backbone_llm_config']['openapi_key'] = cls._config['backbone_llm_openapi_key']
+
             print(f"配置加载成功: {cls._config}")
         except Exception as e:
             print(f"配置文件加载失败: {str(e)}")
