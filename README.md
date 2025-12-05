@@ -57,6 +57,8 @@ agent_core/
 ### 外部openapi接口的LLM供应商
 推荐硅基流动，比较便宜，而且有赠送金，[硅基流动](https://cloud.siliconflow.cn/me/models)
 
+（我的[邀请链接](https://cloud.siliconflow.cn/i/zYdjNNQB)双赢白送2000万token❤️）
+
 model_name = 模型全名，去对应位置复制
 
 openapi_url = https://api.siliconflow.cn/v1 硅基流动的api
