@@ -2,6 +2,7 @@ import json
 
 from event_bus import EventBus
 
+from tools.tts.stream_audio_player import StreamingAudioPlayer
 from utils.config_manager import ConfigManager
 from utils.logger import get_logger
 from tools.tts.tts_engines import EdgeTTSEngine, CustomTTSEngine, GSVEngine, OpenAITTSEngine
@@ -80,4 +81,6 @@ tts_config = load_tts_config()
 global_config = ConfigManager.get_config()
 core_server_config = ConfigManager.get_server_config()
 backbone_llm_config = ConfigManager.get_backbone_config()
+
+global_stream_audio_player = StreamingAudioPlayer()
 

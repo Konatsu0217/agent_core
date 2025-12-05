@@ -46,13 +46,13 @@ class StreamingAudioPlayer:
 
                         # 当积累足够数据时开始播放
                         if bytes_played >= self.min_buffer_size and not pygame.mixer.music.get_busy():
-                            # 等待0.5秒让缓冲区积累更多数据
-                            if self.is_receiving:
-                                elapsed = time.time() - self.buffer_start_time
-                                if elapsed < 0.5:
-                                    wait_time = 0.5 - elapsed
-                                    print(f"⏳ 等待 {wait_time:.2f} 秒让缓冲区积累数据...")
-                                    time.sleep(wait_time)
+                            # # 等待0.5秒让缓冲区积累更多数据
+                            # if self.is_receiving:
+                            #     elapsed = time.time() - self.buffer_start_time
+                            #     if elapsed < 0.5:
+                            #         wait_time = 0.5 - elapsed
+                            #         print(f"⏳ 等待 {wait_time:.2f} 秒让缓冲区积累数据...")
+                            #         time.sleep(wait_time)
 
                             # 重置缓冲区位置
                             temp_buffer.seek(0)
@@ -60,8 +60,6 @@ class StreamingAudioPlayer:
                             # 加载并播放
                             pygame.mixer.music.load(temp_buffer)
                             pygame.mixer.music.play()
-
-                            print(f"🎼 开始播放片段: {bytes_played} bytes, time = {time.time()}")
 
                             # 创建新的缓冲区用于下一段
                             temp_buffer = io.BytesIO()

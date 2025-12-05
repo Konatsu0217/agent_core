@@ -75,7 +75,7 @@ class FastAgent(IBaseAgent):
         self.response_cache['expression'] = result_json.get('expression', '')
 
         return AgentResponse(
-            response=result,
+            response=result_json,
             session_id=request.session_id
         )
 
@@ -136,11 +136,18 @@ class FastAgent(IBaseAgent):
 
 
     async def run_basic(self, messages: list[dict[str, Any]], tools: list[dict[str, Any]]) -> dict[str, Any]:
-        return await self.backbone_llm_client.chat_completion(
-            messages=messages,
-            tools=tools
-        )
+        final_answer = None
+        async for event in self.run_llm_with_tools(
+                self.backbone_llm_client,
+                messages,
+                tools
+        ):
+            # ======== 最终输出 ========
+            if event["event"] == "final_content":
+                final_answer = event["content"]
+                continue
 
+        return final_answer
 
     def get_capabilities(self) -> dict:
         """返回 Agent 能力描述"""
