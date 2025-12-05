@@ -50,7 +50,7 @@ class FastAgent(IBaseAgent):
         # 工具和pe
         messages, tools = await self.async_get_pe_and_mcp_tools(
             session_id=request.session_id,
-            user_query=request.query
+            user_query=self.warp_query(request.query)
         )
 
         if self.use_tools:
