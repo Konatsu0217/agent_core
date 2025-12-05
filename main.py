@@ -2,6 +2,7 @@
 Agent Core 主服务器
 基于FastAPI的基础服务器骨架
 """
+import asyncio
 
 import uvicorn
 from fastapi import FastAPI, HTTPException
@@ -10,6 +11,8 @@ from contextlib import asynccontextmanager
 
 import global_statics
 from clients.llm_client import LLMClientManager
+from core.fast_agent import FastAgent
+from handlers.tts_handler import TTSHandler
 from models.agent_data_models import AgentRequest, AgentResponse
 from utils.config_manager import ConfigManager
 from global_statics import logger, eventBus
@@ -49,6 +52,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+fast_agent = FastAgent(use_tools=False)
 
 @app.get("/")
 async def root():
@@ -112,6 +116,29 @@ async def get_status():
 # async def handle_query(request: AgentRequest) -> AgentResponse:
 #     return await orchestrator.process_query(request)
 
+@app.post("/test/query")
+async def get_agent_query(request_json: dict[str, str]):
+    user_input = request_json.get("query", "")
+
+    request = AgentRequest(
+        query=user_input
+    )
+
+    response = await fast_agent.process(
+        request
+    )
+
+    text = response.response.get('response', '')
+    asyncio.create_task(play_tts(text))
+
+    return {
+        "role": "system",
+        "content": text,
+        "status": "success"
+    }
+
+async def play_tts(text: str):
+    await TTSHandler.handle_tts_direct_play(text)
 
 
 def main():
@@ -131,6 +158,9 @@ def main():
         timeout_keep_alive=config['timeout_keep_alive']
     )
 
+async def async_init():
+    await fast_agent.initialize()
 
 if __name__ == "__main__":
+    asyncio.run(async_init())
     main()
