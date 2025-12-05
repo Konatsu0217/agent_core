@@ -83,11 +83,12 @@ class PEClient:
                 logger.info("WebSocket连接已关闭")
 
     async def build_prompt(
-        self,
-        session_id: str,
-        user_query: str,
-        request_id: Optional[str] = None,
-        stream: bool = False
+            self,
+            session_id: str,
+            user_query: str,
+            request_id: Optional[str] = None,
+            system_resources: Optional[str] = None,
+            stream: bool = False
     ) -> Dict[str, Any]:
 
         await self.ensure_connected()
@@ -98,7 +99,10 @@ class PEClient:
         req = {
             "type": "build_prompt",
             "request_id": request_id,
-            "data": {"session_id": session_id, "user_query": user_query, "stream": stream}
+            "data": {"session_id": session_id,
+                     "user_query": user_query,
+                     "system_resources": system_resources,
+                     "stream": stream}
         }
 
         try:
