@@ -18,4 +18,4 @@ async def main(mock_input: str):
 
 if __name__ == "__main__":
     fast_agent = FastAgent()
-    asyncio.run(main("你好，请分别帮我查一下北京，上海，广州，深圳在2023年01月01日的天气"))
+    asyncio.run(main("你可以有哪些动作"))

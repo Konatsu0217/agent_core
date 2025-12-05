@@ -1,9 +1,8 @@
 import asyncio
 import json
 import uuid
-from typing import Any
+from typing import Any, Optional
 
-from clients import LLMClientManager
 from clients.llm_client import static_llmClientManager
 from clients.mcp_client import MCPHubClient
 from clients.pe_client import PEClient
@@ -14,13 +13,18 @@ from models.agent_data_models import AgentRequest, AgentResponse
 
 class FastAgent(IBaseAgent):
     """快速 Agent 实现"""
-    def __init__(self, name: str = "fast_agent", use_tools: bool = True):
+    def __init__(self, extra_prompt: Optional[str] = None, name: str = "fast_agent", use_tools: bool = True):
         """初始化 Agent"""
+        self.extra_prompt : Optional[str] = extra_prompt
+
         self.backbone_llm_client = static_llmClientManager.get_client()
         # 初始化mcp管理中心客户端
         self.mcpClient = MCPHubClient(global_config['mcphub_url'])
         # 初始化PE客户端并建立连接
         self.peClient = PEClient(global_config['pe_url'])
+
+        # 聊天内容的后处理，先返回再异步处理tts等后续工作
+        self.response_cache: dict[str, str] = {}
 
         self.use_tools = use_tools
         self.mcp_tool_cache = {}
@@ -45,18 +49,30 @@ class FastAgent(IBaseAgent):
 
         pass
 
+    def warp_query(self, query: str) -> str:
+        """包装用户查询，添加必要的上下文"""
+        return f"用户查询: {query}, 你的回复必须为json格式{{'response': '你的回复','action': '简短、精准地表述你要做的肢体动作，使用英文','expression': '从我为你提供的tool_type = resource中选择表情(可选，如果未提供则为空字符串)'}}"
+
     async def process(self, request: AgentRequest) -> AgentResponse:
         """处理用户请求"""
         # 工具和pe
         messages, tools = await self.async_get_pe_and_mcp_tools(
             session_id=request.session_id,
-            user_query=self.warp_query(request.query)
+            user_query=self.warp_query(request.query),
+            extra_prompt=self.extra_prompt if self.extra_prompt is not None else "",
         )
 
         if self.use_tools:
             result = await self.run_with_tools(messages, tools)
         else :
             result = await self.run_basic(messages, tools)
+
+        result_json= json.loads(result)
+        # 用来存聊天记录
+        self.response_cache['query'] = request.query
+        self.response_cache['response'] = result_json.get('response', '')
+        self.response_cache['action'] = result_json.get('action', '')
+        self.response_cache['expression'] = result_json.get('expression', '')
 
         return AgentResponse(
             response=result,
@@ -140,12 +156,13 @@ class FastAgent(IBaseAgent):
             "tokens": 99999  # 假设每个请求 10 个 Token
         }
 
-    async def async_get_pe_and_mcp_tools(self, session_id: str, user_query: str):
+    async def async_get_pe_and_mcp_tools(self, session_id: str, user_query: str, extra_prompt: str = ''):
         # ✅ 统一创建 Task 对象
         pe_task = asyncio.create_task(self.peClient.build_prompt(
             session_id=session_id,
             user_query=user_query,
             request_id=str(uuid.uuid4()),
+            system_resources=extra_prompt,
             stream=False
         ))
 
