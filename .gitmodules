@@ -1,3 +1,6 @@
 [submodule "tools/mcp_hub"]
 	path = tools/mcp_hub
 	url = https://github.com/Konatsu0217/agent_mcp_hub.git
+[submodule "tools/pe_server"]
+	path = tools/pe_server
+	url = https://github.com/Konatsu0217/agent_pe_server.git
