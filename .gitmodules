@@ -1,0 +1,3 @@
+[submodule "tools/mcp_hub"]
+	path = tools/mcp_hub
+	url = https://github.com/Konatsu0217/agent_mcp_hub.git
