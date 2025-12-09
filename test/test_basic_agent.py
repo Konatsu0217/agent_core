@@ -2,6 +2,7 @@ import asyncio
 
 from core.fast_agent import FastAgent
 from handlers.tts_handler import TTSHandler
+from handlers.vrma_handler import VRMAHandler
 from models.agent_data_models import AgentRequest
 
 async def main(mock_input: str):
@@ -16,10 +17,16 @@ async def main(mock_input: str):
     )
 
     text = response.response.get('response', '')
+    motion_prompt = response.response.get('action', '')
 
     print(f"\nresponse: {response}")
 
-    await TTSHandler.handle_tts_direct_play(text)
+
+    print(f"text: {text}")
+
+    tts_task = asyncio.create_task(TTSHandler.handle_tts_direct_play(text))
+    vrma_task = asyncio.create_task(VRMAHandler.generate_vrma(motion_prompt))
+    await asyncio.gather(tts_task, vrma_task)
 
 if __name__ == "__main__":
     fast_agent = FastAgent(use_tools=False)

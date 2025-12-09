@@ -4,3 +4,6 @@
 [submodule "tools/pe_server"]
 	path = tools/pe_server
 	url = https://github.com/Konatsu0217/agent_pe_server.git
+[submodule "tools/bvh_converter"]
+	path = tools/bvh_converter
+	url = https://github.com/vrm-c/bvh2vrma.git
