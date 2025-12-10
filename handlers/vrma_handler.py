@@ -7,5 +7,19 @@ class VRMAHandler:
 
     @staticmethod
     async def generate_vrma(text: str) -> str:
-         vrma_file_path = await from_text_to_vrma(text)
-         return vrma_file_path
+        vrma_file_path = await from_text_to_vrma(text)
+        return vrma_file_path
+
+    @staticmethod
+    async def handle_vrma_direct_play(motion_text: str = None, valid_vrma_path: str = None):
+        if motion_text is None and valid_vrma_path is not None:
+            play_select_vrma(valid_vrma_path)
+            return
+
+        gen_vrma_file_path = await from_text_to_vrma(motion_text)
+        play_select_vrma(gen_vrma_file_path)
+
+
+# Not implemented yet
+def play_select_vrma(path: str):
+    print("Not implemented yet")
