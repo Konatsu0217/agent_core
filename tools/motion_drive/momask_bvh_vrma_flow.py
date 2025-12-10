@@ -96,7 +96,9 @@ async def from_text_to_vrma(text_prompt: str) -> str:
 if __name__ == "__main__":
     # test bvh2vrma flow
     import asyncio
-    asyncio.run(from_bvh_to_vrma("/Users/bytedance/Desktop/explore_tech/agent_repo/agent_core/tools/bvh_converter/walking.bvh"))
+    path = asyncio.run(from_bvh_to_vrma("/Users/bytedance/Desktop/explore_tech/agent_repo/agent_core/tools/motion_drive/pick_something_up_from_ground.bvh"
+                                 , "pick_something_up_from_ground"))
 
+    print(path)
     # test text2vrma flow
-    asyncio.run(from_text_to_vrma("a person is walking"))
+    # asyncio.run(from_text_to_vrma("a person is walking"))
