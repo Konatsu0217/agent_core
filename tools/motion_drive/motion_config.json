@@ -1,0 +1,5 @@
+{
+  "motion_gen_path": "http://localhost:6006/generate",
+  "vrma_converter_path": "http://localhost:25533",
+  "vrma_file_download_local_path": "/Users/bytedance/Desktop/explore_tech/agent_repo/agent_core/tools/motion_drive/"
+}

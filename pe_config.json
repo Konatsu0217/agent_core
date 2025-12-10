@@ -1,0 +1,41 @@
+{
+  "server": {
+    "port": 25535,
+    "workers": 1,
+    "limit_concurrency": 50,
+    "backlog": 1024,
+    "reload": false,
+    "timeout_keep_alive": 5
+  },
+  "build_prompts_api": {
+    "url": "/api/build-prompts",
+    "timeout": 5,
+    "max_retry_count": 3,
+    "retry_interval": 3
+  },
+  "change_config_api": {
+    "url": "/api/change-config",
+    "timeout": 5,
+    "max_retry_count": 3,
+    "retry_interval": 3
+  },
+  "pe_settings": {
+    "api_url": "/api/build_prompt",
+    "enable_history": false,
+    "history_max_rounds": 6,
+    "enable_tools": true,
+    "enable_rag": true,
+    "max_token_budget": 7000,
+    "system_prompt_path": "test_prompt",
+    "tool_service_url": "http://localhost:8000/tool/get_tool_list",
+    "rag_service_url": "http://localhost:8000/rag/query_and_embedding",
+    "session_history_service_url": "http://localhost:8000/session/history",
+    "rag_top_k": 8,
+    "external_service_timeout": 2
+  },
+  "connection_pool": {
+    "connection_pool_size": 20,
+    "connection_timeout": 2,
+    "read_timeout": 3
+  }
+}

@@ -123,3 +123,5 @@ Desktop.ini
 # secret.key
 # 核心配置文件，里面有api-key，别泄漏
 *.key
+*.bvh
+*.vrma

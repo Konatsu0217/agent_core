@@ -4,52 +4,74 @@
 ```
 agent_core/
 ├── main.py                      # 入口文件，启动 FastAPI 服务
-├── global_config.py             # 配置加载模块
+├── core_config.json             # 核心配置
 ├── requirements.txt             # 依赖列表
 ├── README.md                    # 项目说明
 ├── global_statics.py            # 全局静态变量
+├── clean_logs.sh
+├── get_bvh_request.sh
+├── run_all.py
+├── api.key                      # OpenAPI 密钥
 │
 ├── core/                        # 核心模块
 │   ├── __init__.py
-│   ├── basic_work_flow.py .     # 最原始的agent流程
-│   ├── (WIP)orchestrator.py     # 🔥 调度器（核心）
-│   ├── (WIP)event_router.py     # 🔥 事件路由（Planning）
-│   │   ==== 这里的设计想法：一个core可以有多个agent，分别处理不同程度的query和任务，eg.视觉agent、文本agent ====
 │   ├── agent_interface.py       # 智能体接口
-│   ├── (WIP)fast_agent.py       # 快请求智能体实现
-│   └── (WIP)request_tracker.py  # 请求追踪器
+│   ├── basic_work_flow.py       # 最原始的agent流程
+│   └── fast_agent.py            # 快请求智能体实现
 │
 ├── clients/                     # 外部服务客户端
 │   ├── __init__.py
-│   ├── llm_client.py            # LLM 客户端，包装了OpenAI的客户端，流式
-│   ├── pe_client.py             # PE Server 客户端
+│   ├── llm_client.py            # LLM 客户端，包装OpenAI流式接口
 │   ├── mcp_client.py            # MCP Hub 客户端
-│   └── session_client.py        # Session Manager 客户端
+│   └── pe_client.py             # PE Server 客户端
 │
 ├── models/                      # 数据模型
 │   ├── __init__.py
-│   └── (WIP)agent_data_model.py # 协议消息模型
-│
-├── tools/                       # 玩法工具
-│   ├── __init__.py
-│   ├── tts/                     # 多种edgeTTS的调用包装
-│   └── TBD                      # vrm还没补，依赖前端多
+│   └── agent_data_models.py     # 协议消息模型
 │
 ├── handlers/                    # 特殊处理器
-│   ├── __init__.py              # 输出层到TTS/前端/Vrm/其他玩法
-│   ├── TBD                      # 工具调用集成在mcphub里了
-│   └── TBD                      # 流式响应处理器
+│   ├── __init__.py
+│   ├── tts_handler.py
+│   └── vrma_handler.py
 │
 ├── utils/                       # 工具函数
 │   ├── __init__.py
 │   ├── config_manager.py        # 配置管理模块
-│   ├── (WIP)logger.py           # 日志配置模块 ⬅️现在会到处拉log文件夹
-│   └── connect_manager.py       # 连接管理模块,其实暂时不需要
+│   ├── connet_manager.py        # 连接管理模块
+│   └── logger.py                # 日志配置模块
 │
-└── tests/                       # 测试文件
-    ├── test_orchestrator.py
-    ├── test_llm_client.py
-    └── test_tool_calls.py
+├── tools/                       # 工具与子模块
+│   ├── __init__.py
+│   ├── bvh_converter/           # BVH 转 VRMA 前端工具
+│   ├── mcp_hub/                 # MCP Hub 相关
+│   ├── motion_drive/            # 动作生成流程
+│   ├── pe_server/               # PE Server 组件
+│   └── tts/                     # TTS 引擎与服务
+│
+├── doc/                         # 文档
+│   ├── agent_core_guide.md
+│   ├── agent_paradigms_guide.md
+│   ├── model_speed_test.md
+│   └── moe_agent_architecture.md
+│
+├── mcp_servers_config.json
+├── pe_config.json
+│
+├── tts/                         # 顶层 TTS 模块
+│   ├── __init__.py
+│   ├── function_call_way.py
+│   ├── net_request_way_server.py
+│   ├── stream_audio_player.py
+│   ├── tts_config.json
+│   └── tts_engines.py
+│
+├── test/                        # 测试文件
+│   ├── test_basic_agent.py
+│   ├── test_llm_client.py
+│   └── test_tts/
+│       ├── demo_relay_simple.py
+│       ├── demo_sequential_play.py
+│       └── demo_tts_streaming.py
 ```
 
 ## 依赖

@@ -13,6 +13,7 @@ import global_statics
 from clients.llm_client import LLMClientManager
 from core.fast_agent import FastAgent
 from handlers.tts_handler import TTSHandler
+from handlers.vrma_handler import VRMAHandler
 from models.agent_data_models import AgentRequest, AgentResponse
 from utils.config_manager import ConfigManager
 from global_statics import logger, eventBus
@@ -130,6 +131,7 @@ async def get_agent_query(request_json: dict[str, str]):
 
     text = response.response.get('response', '')
     asyncio.create_task(play_tts(text))
+    asyncio.create_task(generate_vrma(text))
 
     return {
         "role": "system",
@@ -139,6 +141,9 @@ async def get_agent_query(request_json: dict[str, str]):
 
 async def play_tts(text: str):
     await TTSHandler.handle_tts_direct_play(text)
+
+async def generate_vrma(text: str) -> str:
+    await VRMAHandler.generate_vrma(text)
 
 
 def main():

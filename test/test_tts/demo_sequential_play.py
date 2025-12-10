@@ -9,7 +9,7 @@ import time
 
 import requests
 
-from function_demo.demo_stream_audio_player import StreamingAudioPlayer
+from tools.tts.stream_audio_player import StreamingAudioPlayer
 
 
 def test_streaming_sequential_play():
