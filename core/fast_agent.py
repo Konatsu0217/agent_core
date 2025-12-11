@@ -51,7 +51,7 @@ class FastAgent(IBaseAgent):
 
     def warp_query(self, query: str) -> str:
         """包装用户查询，添加必要的上下文"""
-        return f"用户查询: {query}, 你的回复必须为json格式{{'response': '你的回复','action': '简短、精准地表述你要做的肢体动作，使用英文','expression': '从我为你提供的tool_type = resource中选择表情(可选，如果未提供则为空字符串)'}}"
+        return f"用户查询: {query}, system: 你的回复必须为json格式{{'response': '你的回复','action': '简短、精准地表述你要做的肢体动作，使用英文','expression': '从我为你提供的tool_type = resource中选择表情(可选，如果未提供则为空字符串)'}}"
 
     async def process(self, request: AgentRequest) -> AgentResponse:
         """处理用户请求"""

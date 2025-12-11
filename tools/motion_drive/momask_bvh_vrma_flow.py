@@ -4,7 +4,7 @@ import time
 
 import aiohttp
 
-with open("motion_config.json", "r") as f:
+with open("/Users/bytedance/Desktop/explore_tech/agent_repo/agent_core/tools/motion_drive/motion_config.json", "r") as f:
     config = json.load(f)
 
 async def from_text_to_bvh(text_prompt: str) -> str:
