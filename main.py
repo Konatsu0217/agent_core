@@ -4,23 +4,22 @@ Agent Core 主服务器
 """
 import asyncio
 import json
+import uuid
+from contextlib import asynccontextmanager
 
 import uvicorn
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from contextlib import asynccontextmanager
-
+from fastapi.params import Query
 from starlette.websockets import WebSocketDisconnect, WebSocket
 
 import global_statics
-from clients.llm_client import LLMClientManager
 from core.fast_agent import FastAgent
+from global_statics import logger
 from handlers.tts_handler import TTSHandler
-from handlers.vrma_handler import VRMAHandler
-from models.agent_data_models import AgentRequest, AgentResponse
+from models.agent_data_models import AgentRequest
 from utils.config_manager import ConfigManager
-from global_statics import logger, eventBus
-
+from utils.connet_manager import PlayWSManager
 
 
 @asynccontextmanager
@@ -57,6 +56,7 @@ app.add_middleware(
 )
 
 fast_agent = FastAgent(use_tools=True)
+connect_manager = PlayWSManager()
 
 @app.get("/")
 async def root():
@@ -142,9 +142,19 @@ async def get_agent_query(request_json: dict[str, str]):
         "status": "success"
     }
 
+@app.get("/get_ws_session_id")
+async def get_ws_session_id():
+    session_id = str(uuid.uuid4())
+    return {
+        "session_id": session_id
+    }
+
 @app.websocket("/ws/agent/query")
-async def websocket_agent_query(websocket: WebSocket):
+async def websocket_agent_query(websocket: WebSocket, session_id: str = Query()):
     await websocket.accept()
+
+    print("Session =", session_id)
+    await connect_manager.cache_websocket(session_id, websocket)
 
     try:
         while True:
@@ -159,17 +169,19 @@ async def websocket_agent_query(websocket: WebSocket):
             if not user_input:
                 continue
 
+            session_id = request_json.get("session_id", session_id)
+
             # 代理请求
-            response = await fast_agent.process(AgentRequest(query=user_input))
+            response = await fast_agent.process(AgentRequest(query=user_input, session_id=session_id))
 
             raw = response.response
             text = raw.get("response", "") if isinstance(raw, dict) else str(raw)
 
             # 后台任务
-            t1 = asyncio.create_task(play_tts(text))
+            t1 = asyncio.create_task(get_tts_chunk(text, session_id))
             t1.add_done_callback(lambda t: print("TTS finished", t.exception()))
 
-            t2 = asyncio.create_task(generate_vrma(text))
+            t2 = asyncio.create_task(generate_vrma(text, session_id))
             t2.add_done_callback(lambda t: print("VRMA finished", t.exception()))
 
             await websocket.send_json({
@@ -185,11 +197,22 @@ async def websocket_agent_query(websocket: WebSocket):
         print("Error:", e)
 
 
-async def play_tts(text: str):
-    # await TTSHandler.handle_tts_direct_play(text)
-    pass
+async def play_tts(text: str, session_id: str):
+    await TTSHandler.handle_tts_direct_play(text)
 
-async def generate_vrma(text: str) -> str:
+async def get_tts_chunk(text: str, session_id: str):
+    async_gen = TTSHandler.handle_tts_for_chunk(text)
+
+    async for chunk in async_gen:
+        await connect_manager.send_chunk_to(session_id, chunk)
+
+    # 所有块发送完毕
+    await connect_manager.send_msg_to(session_id, json.dumps({
+        "type": "tts_end",
+        "session_id": session_id
+    }))
+
+async def generate_vrma(text: str, session_id: str) -> str:
     # await VRMAHandler.generate_vrma(text)
     pass
 

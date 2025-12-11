@@ -36,7 +36,7 @@ class EdgeTTSEngine(TTSEngine):
         """生成Edge TTS音频"""
         edgettsLanguage = tts_settings.get('edgettsLanguage', 'zh-CN')
         edgettsVoice = tts_settings.get('edgettsVoice', 'XiaoyiNeural')
-        rate = tts_settings.get('edgettsRate', 1.3)
+        rate = tts_settings.get('edgettsRate', 1.0)
 
         full_voice_name = f"{edgettsLanguage}-{edgettsVoice}"
         rate_text = "+0%"

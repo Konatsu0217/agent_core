@@ -19,7 +19,7 @@ class FastAgent(IBaseAgent):
 
         self.backbone_llm_client = static_llmClientManager.get_client()
         # 初始化mcp管理中心客户端
-        self.mcpClient = MCPHubClient(global_config['mcphub_url'])
+        self.mcpClient = MCPHubClient(base_url=f"{global_config['mcphub_url']}:{global_config['mcphub_port']}")
         # 初始化PE客户端并建立连接
         self.peClient = PEClient(global_config['pe_url'])
 

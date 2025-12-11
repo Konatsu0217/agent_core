@@ -43,6 +43,7 @@ class ConfigManager:
                 
                 # MCP Hub配置
                 'mcphub_url': config_data['mcphub_config']['url'],
+                'mcphub_port': config_data['mcphub_config']['port'],
             }
 
             if cls._config['backbone_llm_openapi_key'] == "":
