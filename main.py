@@ -219,9 +219,7 @@ async def get_tts_chunk(text: str, session_id: str):
 
 # 修改generate_vrma函数
 async def generate_vrma(text: str, session_id: str) -> str:
-    # path = await VRMAHandler.generate_vrma(text)
-    # 获取文件名
-    filename = 'pick_something_up_from_ground.vrma'
+    filename = await VRMAHandler.generate_vrma(text)
     # 构建Web可访问的URL
     vrma_url = f"/vrma_files/{filename}"
     await connect_manager.send_json_to(session_id, {

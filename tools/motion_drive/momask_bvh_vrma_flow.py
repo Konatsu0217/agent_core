@@ -90,8 +90,8 @@ async def from_bvh_to_vrma(bvh_file_path: str, motion_name: str) -> str:
 async def from_text_to_vrma(text_prompt: str) -> str:
     bvh_file_path = await from_text_to_bvh(text_prompt)
     motion_name = text_prompt.replace(" ", "_")
-    vrma_file_path = await from_bvh_to_vrma(bvh_file_path, motion_name)
-    return vrma_file_path
+    await from_bvh_to_vrma(bvh_file_path, motion_name)
+    return motion_name
 
 if __name__ == "__main__":
     # test bvh2vrma flow
