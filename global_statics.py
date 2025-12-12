@@ -8,7 +8,7 @@ from utils.logger import get_logger
 from tools.tts.tts_engines import EdgeTTSEngine, CustomTTSEngine, GSVEngine, OpenAITTSEngine
 
 # 配置常量
-TTS_CONFIG_FILE = "tools/tts/tts_config.json"
+TTS_CONFIG_FILE = "config/tts.json"
 eventBus = EventBus()
 
 class TTSStateTracker:
@@ -84,4 +84,3 @@ backbone_llm_config = ConfigManager.get_backbone_config()
 
 # 临时使用的播放器（后续会根据需求调整）
 global_stream_audio_player = StreamingAudioPlayer()
-

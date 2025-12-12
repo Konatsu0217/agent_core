@@ -1,5 +1,8 @@
 # 快速开始
 
+
+环境都配置好之后，run_all.py 即可启动所有服务(包括前端)
+
 ## 大纲请看 agent_core_guide.md 感谢claude（
 ```
 agent_core/

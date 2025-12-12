@@ -3,21 +3,25 @@ Agent Core 主服务器
 基于FastAPI的基础服务器骨架
 """
 import asyncio
+import json
+import uuid
+from contextlib import asynccontextmanager
 
 import uvicorn
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from contextlib import asynccontextmanager
+from fastapi.params import Query
+from starlette.websockets import WebSocketDisconnect, WebSocket
 
 import global_statics
-from clients.llm_client import LLMClientManager
 from core.fast_agent import FastAgent
+from global_statics import logger
 from handlers.tts_handler import TTSHandler
+from fastapi.staticfiles import StaticFiles
 from handlers.vrma_handler import VRMAHandler
-from models.agent_data_models import AgentRequest, AgentResponse
+from models.agent_data_models import AgentRequest
 from utils.config_manager import ConfigManager
-from global_statics import logger, eventBus
-
+from utils.connet_manager import PlayWSManager
 
 
 @asynccontextmanager
@@ -25,13 +29,13 @@ async def lifespan(app: FastAPI):
     """应用生命周期管理"""
     # 启动时执行
     logger.info("🚀 Agent Core 服务器启动中...")
-    
+
     # 加载配置
     config = global_statics.global_config
     logger.info(f"配置加载完成: port={config['port']}, workers={config['workers']}")
-    
+
     yield
-    
+
     # 关闭时执行
     logger.info("🛑 Agent Core 服务器关闭中...")
 
@@ -53,7 +57,11 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-fast_agent = FastAgent(use_tools=False)
+fast_agent = FastAgent(use_tools=True)
+connect_manager = PlayWSManager()
+vrma_files_dir = '/Users/bytedance/Desktop/explore_tech/agent_repo/agent_core/tools/motion_drive/'
+app.mount("/vrma_files", StaticFiles(directory=vrma_files_dir), name="vrma_files")
+
 
 @app.get("/")
 async def root():
@@ -101,9 +109,9 @@ async def get_config():
 async def get_status():
     """获取服务状态信息"""
     from global_statics import tts_state_tracker
-    
+
     tts_status = tts_state_tracker.get_status()
-    
+
     return {
         "service": "Agent Core",
         "status": "running",
@@ -134,24 +142,99 @@ async def get_agent_query(request_json: dict[str, str]):
     asyncio.create_task(generate_vrma(text))
 
     return {
-        "role": "system",
+        "role": "assistant",
         "content": text,
         "status": "success"
     }
 
-async def play_tts(text: str):
+@app.get("/get_ws_session_id")
+async def get_ws_session_id():
+    session_id = str(uuid.uuid4())
+    return {
+        "session_id": session_id
+    }
+
+@app.websocket("/ws/agent/query")
+async def websocket_agent_query(websocket: WebSocket, session_id: str = Query()):
+    await websocket.accept()
+
+    print("Session =", session_id)
+    await connect_manager.cache_websocket(session_id, websocket)
+
+    try:
+        while True:
+            message = await websocket.receive()
+
+            if "text" not in message:
+                continue
+
+            request_json = json.loads(message["text"])
+
+            user_input = request_json.get("query", "")
+            if not user_input:
+                continue
+
+            session_id = request_json.get("session_id", session_id)
+
+            # 代理请求
+            response = await fast_agent.process(AgentRequest(query=user_input, session_id=session_id))
+
+            raw = response.response
+            text = raw.get("response", "") if isinstance(raw, dict) else str(raw)
+
+            # 后台任务
+            t1 = asyncio.create_task(get_tts_chunk(text, session_id))
+            t1.add_done_callback(lambda t: print("TTS finished", t.exception()))
+
+            t2 = asyncio.create_task(generate_vrma(text, session_id))
+            t2.add_done_callback(lambda t: print("VRMA finished", t.exception()))
+
+            await websocket.send_json({
+                "role": "assistant",
+                "content": text,
+                "status": "success"
+            })
+
+    except WebSocketDisconnect:
+        await connect_manager.uncache_websocket(session_id)
+        print("WebSocket client disconnected")
+
+    except Exception as e:
+        print("Error:", e)
+
+
+async def play_tts(text: str, session_id: str):
     await TTSHandler.handle_tts_direct_play(text)
 
-async def generate_vrma(text: str) -> str:
-    await VRMAHandler.generate_vrma(text)
+async def get_tts_chunk(text: str, session_id: str):
+    async_gen = TTSHandler.handle_tts_for_chunk(text)
+
+    async for chunk in async_gen:
+        await connect_manager.send_chunk_to(session_id, chunk)
+
+    # 所有块发送完毕
+    await connect_manager.send_msg_to(session_id, json.dumps({
+        "type": "tts_end",
+        "session_id": session_id
+    }))
+
+# 修改generate_vrma函数
+async def generate_vrma(text: str, session_id: str) -> str:
+    filename = await VRMAHandler.generate_vrma(text)
+    # 构建Web可访问的URL
+    vrma_url = f"/vrma_files/{filename}"
+    await connect_manager.send_json_to(session_id, {
+        "type": "vrma_action",
+        "url": vrma_url
+    })
 
 
 def main():
     """主函数，启动服务器"""
     config = ConfigManager.get_config()
-    
-    logger.info(f"启动服务器: http://0.0.0.0:{config['port']}")
-    
+
+    print(f"启动主服务: http://0.0.0.0:{config['port']}")
+
     uvicorn.run(
         "main:app",
         host="0.0.0.0",
@@ -160,7 +243,8 @@ def main():
         limit_concurrency=config['limit_concurrency'],
         backlog=config['backlog'],
         reload=config['reload'],
-        timeout_keep_alive=config['timeout_keep_alive']
+        timeout_keep_alive=config['timeout_keep_alive'],
+        log_level="error"
     )
 
 async def async_init():
