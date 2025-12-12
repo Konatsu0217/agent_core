@@ -196,6 +196,7 @@ async def websocket_agent_query(websocket: WebSocket, session_id: str = Query())
             })
 
     except WebSocketDisconnect:
+        await connect_manager.uncache_websocket(session_id)
         print("WebSocket client disconnected")
 
     except Exception as e:
@@ -232,7 +233,7 @@ def main():
     """主函数，启动服务器"""
     config = ConfigManager.get_config()
 
-    logger.info(f"启动服务器: http://0.0.0.0:{config['port']}")
+    print(f"启动主服务: http://0.0.0.0:{config['port']}")
 
     uvicorn.run(
         "main:app",
@@ -242,7 +243,8 @@ def main():
         limit_concurrency=config['limit_concurrency'],
         backlog=config['backlog'],
         reload=config['reload'],
-        timeout_keep_alive=config['timeout_keep_alive']
+        timeout_keep_alive=config['timeout_keep_alive'],
+        log_level="error"
     )
 
 async def async_init():

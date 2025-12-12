@@ -13,7 +13,7 @@ class PlayWSManager:
         self.cache[session_id] = websocket
         logging.info(f"Main interface connected. Total: {len(self.cache)}")
 
-    async def uncache_websocket(self, session_id: str, websocket: WebSocket):
+    async def uncache_websocket(self, session_id: str):
         logging.info(f"Main interface disconnected. Total: {len(self.cache)}")
         del self.cache[session_id]
 
