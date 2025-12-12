@@ -1,0 +1,27 @@
+{
+  "server": {
+    "port": 38888,
+    "workers": 1,
+    "limit_concurrency": 50,
+    "backlog": 1024,
+    "reload": false,
+    "timeout_keep_alive": 5
+  },
+  "backbone_llm_config": {
+    "openapi_url": "https://api.siliconflow.cn/v1",
+    "openapi_key": "",
+    "model_name": "Qwen/Qwen3-14B",
+    "temperature": 0.7,
+    "max_tokens": 1024
+  },
+  "pe_config": {
+    "url": "ws://0.0.0.0:25535"
+  },
+  "rag_config": {
+    "url": "http://0.0.0.0:25536"
+  },
+  "mcphub_config": {
+    "url": "http://0.0.0.0",
+    "port": 9000
+  }
+}

@@ -1,17 +1,26 @@
+import os
 import subprocess
 import time
+from pathlib import Path
 
-mcp_example_service = subprocess.Popen(["python", "tools/mcp_hub/mcp_servers/mcp_server_example.py"])
+BASE_DIR = Path(__file__).resolve().parent
+CONFIG_DIR = BASE_DIR / "config"
+
+env = os.environ.copy()
+env["CORE_CONFIG_FILE"] = str(CONFIG_DIR / "core.json")
+env["MCP_CONFIG_FILE"] = str(CONFIG_DIR / "mcp_servers.json")
+
+mcp_example_service = subprocess.Popen(["python3", "tools/mcp_hub/mcp_servers/mcp_server_example.py"], cwd=str(BASE_DIR), env=env)
 
 print(f"mcp_example_service 已启动")
 time.sleep(3)
 
-pe_service = subprocess.Popen(["python", "tools/pe_server/main.py"])
+pe_service = subprocess.Popen(["python3", "tools/pe_server/main.py"], cwd=str(BASE_DIR), env=env)
 
 print(f"pe_service 已启动")
 time.sleep(3)
 
-mcp_hub_service = subprocess.Popen(["python", "tools/mcp_hub/mcp_center_server.py"])
+mcp_hub_service = subprocess.Popen(["python3", "tools/mcp_hub/mcp_center_server.py", "--config", str(CONFIG_DIR / "mcp_servers.json")], cwd=str(BASE_DIR), env=env)
 
 print(f"mcp_hub_service 已启动")
 time.sleep(3)

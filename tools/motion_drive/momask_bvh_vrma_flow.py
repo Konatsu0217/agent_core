@@ -1,11 +1,31 @@
 import json
 import os
 import time
+from pathlib import Path
 
 import aiohttp
 
-with open("/Users/bytedance/Desktop/explore_tech/agent_repo/agent_core/tools/motion_drive/motion_config.json", "r") as f:
-    config = json.load(f)
+# 读取配置（优先使用项目根目录下 config/motion.json）
+def _load_motion_config():
+    candidates = [
+        Path("config/motion.json"),
+        Path(__file__).resolve().parents[2] / "config" / "motion.json",
+        Path("tools/motion_drive/motion_config.json")
+    ]
+    for p in candidates:
+        try:
+            if p.exists():
+                with open(p, "r", encoding="utf-8") as f:
+                    return json.load(f)
+        except Exception:
+            continue
+    return {
+        "motion_gen_path": "http://localhost:6006/generate",
+        "vrma_converter_path": "http://localhost:25533",
+        "vrma_file_download_local_path": "tools/motion_drive/"
+    }
+
+config = _load_motion_config()
 
 async def from_text_to_bvh(text_prompt: str) -> str:
     motion_gen_path = config.get("motion_gen_path")

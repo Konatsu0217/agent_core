@@ -2,7 +2,10 @@
 独立的配置管理模块，解决循环导入问题
 """
 import json
-from typing import Dict, Any
+import os
+from pathlib import Path
+from typing import Dict, Any, Optional
+from utils.config_schemas import CoreConfig
 
 
 class ConfigManager:
@@ -11,52 +14,98 @@ class ConfigManager:
     _raw_config: Dict[str, Any] = None
 
     @classmethod
-    def load_config(cls, config_path='/Users/bytedance/Desktop/explore_tech/agent_repo/agent_core/core_config.json'):
+    def load_config(cls, config_path: Optional[str] = None):
         """加载配置文件"""
         try:
-            with open(config_path, 'r', encoding='utf-8') as f:
-                config_data = json.load(f)
+            # 允许通过环境变量指定配置文件路径
+            env_path = os.getenv('CORE_CONFIG_FILE')
+            candidates = []
+            if config_path:
+                candidates.append(Path(config_path))
+            if env_path:
+                candidates.append(Path(env_path))
+            # 常见路径候选（相对/项目根）
+            candidates.extend([
+                Path('config/core.json'),
+                Path(__file__).resolve().parents[1] / 'config' / 'core.json',
+                Path('core_config.json'),
+                Path(__file__).resolve().parents[1] / 'core_config.json',
+            ])
+
+            config_data = None
+            for p in candidates:
+                try:
+                    if p.exists():
+                        with open(p, 'r', encoding='utf-8') as f:
+                            config_data = json.load(f)
+                            break
+                except Exception:
+                    continue
+            if config_data is None:
+                raise FileNotFoundError('core配置文件未找到')
             
+            # 校验与标准化
+            core = CoreConfig(**config_data)
             # 保存原始配置数据
-            cls._raw_config = config_data
+            cls._raw_config = core.model_dump()
             
             # 扁平化配置，便于访问
             cls._config = {
                 # 服务器配置
-                'port': config_data['server']['port'],
-                'workers': config_data['server']['workers'],
-                'limit_concurrency': config_data['server']['limit_concurrency'],
-                'backlog': config_data['server']['backlog'],
-                'reload': config_data['server']['reload'],
-                'timeout_keep_alive': config_data['server']['timeout_keep_alive'],
+                'port': core.server.port,
+                'workers': core.server.workers,
+                'limit_concurrency': core.server.limit_concurrency,
+                'backlog': core.server.backlog,
+                'reload': core.server.reload,
+                'timeout_keep_alive': core.server.timeout_keep_alive,
                 
                 # Backbone LLM配置
-                'backbone_llm_openapi_url': config_data['backbone_llm_config']['openapi_url'],
-                'backbone_llm_openapi_key': config_data['backbone_llm_config']['openapi_key'],
-                'backbone_llm_model_name': config_data['backbone_llm_config']['model_name'],
+                'backbone_llm_openapi_url': core.backbone_llm_config.openapi_url,
+                'backbone_llm_openapi_key': core.backbone_llm_config.openapi_key or "",
+                'backbone_llm_model_name': core.backbone_llm_config.model_name,
 
                 # PE配置
-                'pe_url': config_data['pe_config']['url'],
+                'pe_url': core.pe_config.url,
                 
                 # RAG配置
-                'rag_url': config_data['rag_config']['url'],
+                'rag_url': core.rag_config.url,
                 
                 # MCP Hub配置
-                'mcphub_url': config_data['mcphub_config']['url'],
-                'mcphub_port': config_data['mcphub_config']['port'],
+                'mcphub_url': core.mcphub_config.url,
+                'mcphub_port': core.mcphub_config.port,
             }
 
+            # 环境变量优先，其次读取 config/api.key（若存在）
             if cls._config['backbone_llm_openapi_key'] == "":
-                cls._config['backbone_llm_openapi_key'] = json.load(open('/Users/bytedance/Desktop/explore_tech/agent_repo/agent_core/api.key', 'r'))['openapi_key']
-                config_data['backbone_llm_config']['openapi_key'] = cls._config['backbone_llm_openapi_key']
+                env_key = os.getenv('BACKBONE_LLM_API_KEY', '')
+                if env_key:
+                    cls._config['backbone_llm_openapi_key'] = env_key
+                    cls._raw_config['backbone_llm_config']['openapi_key'] = env_key
+                else:
+                    for kp in [
+                        Path('config/api.key'),
+                        Path(__file__).resolve().parents[1] / 'config' / 'api.key',
+                        Path('api.key'),
+                        Path(__file__).resolve().parents[1] / 'api.key',
+                    ]:
+                        try:
+                            if kp.exists():
+                                with open(kp, 'r', encoding='utf-8') as kf:
+                                    key = json.load(kf).get('openapi_key', '')
+                                    if key:
+                                        cls._config['backbone_llm_openapi_key'] = key
+                                        cls._raw_config['backbone_llm_config']['openapi_key'] = key
+                                        break
+                        except Exception:
+                            continue
 
             print(f"配置加载成功: {cls._config}")
         except Exception as e:
             print(f"配置文件加载失败: {str(e)}")
-            # 使用默认配置作为后备
+            # 使用默认配置作为后备（不包含敏感信息）
             cls._config = {
                 # 服务器默认配置
-                'port': 25535,
+                'port': 38888,
                 'workers': 1,
                 'limit_concurrency': 50,
                 'backlog': 1024,
@@ -65,7 +114,7 @@ class ConfigManager:
                 
                 # Backbone LLM默认配置
                 'backbone_llm_openapi_url': "https://api.openai.com/v1",
-                'backbone_llm_openapi_key': "8d205783-9ac2-49ca-948b-40cbb551b254",
+                'backbone_llm_openapi_key': "",
                 'backbone_llm_model_name': "tts-1",
 
                 # 服务默认URL
@@ -73,7 +122,50 @@ class ConfigManager:
                 'rag_url': "http://127.0.0.1:25536",
                 'mcphub_url': "http://127.0.0.1:25537",
             }
+            # 同步原始结构，避免 None 访问错误
+            cls._raw_config = {
+                'server': {
+                    'port': cls._config['port'],
+                    'workers': cls._config['workers'],
+                    'limit_concurrency': cls._config['limit_concurrency'],
+                    'backlog': cls._config['backlog'],
+                    'reload': cls._config['reload'],
+                    'timeout_keep_alive': cls._config['timeout_keep_alive'],
+                },
+                'backbone_llm_config': {
+                    'openapi_url': cls._config['backbone_llm_openapi_url'],
+                    'openapi_key': cls._config['backbone_llm_openapi_key'],
+                    'model_name': cls._config['backbone_llm_model_name'],
+                    'temperature': 0.7,
+                    'max_tokens': 1024,
+                },
+                'pe_config': {'url': cls._config['pe_url']},
+                'rag_config': {'url': cls._config['rag_url']},
+                'mcphub_config': {'url': cls._config['mcphub_url'], 'port': 9000},
+            }
             print(f"使用默认配置: {cls._config}")
+            if cls._config['backbone_llm_openapi_key'] == "":
+                env_key = os.getenv('BACKBONE_LLM_API_KEY', '')
+                if env_key:
+                    cls._config['backbone_llm_openapi_key'] = env_key
+                    cls._raw_config['backbone_llm_config']['openapi_key'] = env_key
+                else:
+                    for kp in [
+                        Path('config/api.key'),
+                        Path(__file__).resolve().parents[1] / 'config' / 'api.key',
+                        Path('api.key'),
+                        Path(__file__).resolve().parents[1] / 'api.key',
+                    ]:
+                        try:
+                            if kp.exists():
+                                with open(kp, 'r', encoding='utf-8') as kf:
+                                    key = json.load(kf).get('openapi_key', '')
+                                    if key:
+                                        cls._config['backbone_llm_openapi_key'] = key
+                                        cls._raw_config['backbone_llm_config']['openapi_key'] = key
+                                        break
+                        except Exception:
+                            continue
 
     @classmethod
     def get_config(cls):

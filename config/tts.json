@@ -29,7 +29,7 @@
     },
     "openai_voice": {
       "engine": "openai",
-      "api_key": "8d205783-9ac2-49ca-948b-40cbb551b254",
+      "api_key": "",
       "model": "tts-1",
       "openaiVoice": "alloy",
       "openaiSpeed": 1.0,
@@ -38,22 +38,18 @@
       "gsvRefAudioPath": ""
     }
   },
-  
   "edgettsLanguage": "zh-CN",
   "edgettsVoice": "XiaoyiNeural",
   "edgettsRate": 1.0,
-  
   "customTTSserver": "http://127.0.0.1:9880",
   "customTTSspeaker": "default_speaker",
   "customTTSspeed": 1.0,
-  
   "gsvServer": "http://127.0.0.1:9880",
   "gsvRefAudioPath": "uploads/reference.wav",
   "gsvTextLang": "zh",
   "gsvPromptLang": "zh",
   "gsvPromptText": "",
   "gsvRate": 1.0,
-  
   "api_key": "",
   "model": "tts-1",
   "openaiVoice": "alloy",
