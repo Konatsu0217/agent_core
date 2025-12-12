@@ -27,6 +27,11 @@ class PlayWSManager:
         if websocket:
             await websocket.send_bytes(msg)
 
+    async def send_json_to(self, session_id: str, msg: dict):
+        websocket = self.cache.get(session_id)
+        if websocket:
+            await websocket.send_json(msg)
+
     async def send_msg_to(self, session_id: str, chunk: str):
         websocket = self.cache.get(session_id)
         if websocket:

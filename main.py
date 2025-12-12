@@ -17,6 +17,8 @@ import global_statics
 from core.fast_agent import FastAgent
 from global_statics import logger
 from handlers.tts_handler import TTSHandler
+from fastapi.staticfiles import StaticFiles
+from handlers.vrma_handler import VRMAHandler
 from models.agent_data_models import AgentRequest
 from utils.config_manager import ConfigManager
 from utils.connet_manager import PlayWSManager
@@ -57,6 +59,9 @@ app.add_middleware(
 
 fast_agent = FastAgent(use_tools=True)
 connect_manager = PlayWSManager()
+vrma_files_dir = '/Users/bytedance/Desktop/explore_tech/agent_repo/agent_core/tools/motion_drive/'
+app.mount("/vrma_files", StaticFiles(directory=vrma_files_dir), name="vrma_files")
+
 
 @app.get("/")
 async def root():
@@ -212,9 +217,17 @@ async def get_tts_chunk(text: str, session_id: str):
         "session_id": session_id
     }))
 
+# 修改generate_vrma函数
 async def generate_vrma(text: str, session_id: str) -> str:
-    # await VRMAHandler.generate_vrma(text)
-    pass
+    # path = await VRMAHandler.generate_vrma(text)
+    # 获取文件名
+    filename = 'pick_something_up_from_ground.vrma'
+    # 构建Web可访问的URL
+    vrma_url = f"/vrma_files/{filename}"
+    await connect_manager.send_json_to(session_id, {
+        "type": "vrma_action",
+        "url": vrma_url
+    })
 
 
 def main():
