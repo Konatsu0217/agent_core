@@ -1,0 +1,34 @@
+{
+  "server": {
+    "port": 22222,
+    "workers": 1,
+    "limit_concurrency": 50,
+    "backlog": 1024,
+    "reload": false,
+    "timeout_keep_alive": 5
+  },
+  "embedding_api": {
+    "url": "/rag/embedding",
+    "timeout": 5,
+    "max_retry_count": 3,
+    "retry_interval": 3
+  },
+  "memory_settings": {
+    "embedding_model": "BAAI/bge-large-zh-v1.5",
+    "embedding_model_url": "https://api.siliconflow.cn/v1",
+    "embedding_api_key": "",
+    "intent_recognition_model": "deepseek-ai/DeepSeek-R1-0528-Qwen3-8B",
+    "intent_recognition_url": "https://api.siliconflow.cn/v1",
+    "intent_recognition_api_key": "",
+    "distance_strategy": "euclidean",
+    "vector_base_provider": "faiss",
+    "collection_name": "rag_collection",
+    "vector_memory_database": "./vector_memory_database",
+    "embedding_model_dims": 1024
+  },
+  "connection_pool": {
+    "connection_pool_size": 20,
+    "connection_timeout": 2,
+    "read_timeout": 3
+  }
+}
