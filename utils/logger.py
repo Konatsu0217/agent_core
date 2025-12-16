@@ -51,12 +51,8 @@ class Logger:
                 console_handler.setFormatter(formatter)
                 self.logger.addHandler(console_handler)
 
-                root = logging.getLogger()
-                root.setLevel(logging.INFO)
-                if root.handlers:
-                    root.handlers.clear()
-                root.addHandler(file_handler)
-                root.addHandler(console_handler)
+                # 禁止向根logger传播，避免重复输出
+                self.logger.propagate = False
 
                 # 测试日志
                 self.logger.info("===== 日志系统初始化成功 ======")

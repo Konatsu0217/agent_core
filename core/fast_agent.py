@@ -6,7 +6,7 @@ from typing import Any, Optional
 from clients.llm_client import static_llmClientManager
 from clients.mcp_client import MCPHubClient
 from clients.pe_client import PEClient
-from core.agent_interface import IBaseAgent
+from core.agent_interface import IBaseAgent, run_llm_with_tools
 from global_statics import global_config
 from models.agent_data_models import AgentRequest, AgentResponse
 
@@ -27,7 +27,7 @@ class FastAgent(IBaseAgent):
         self.response_cache: dict[str, str] = {}
 
         self.use_tools = use_tools
-        self.mcp_tool_cache = {}
+        self.mcp_tool_cache = []
 
     async def initialize(self):
         """初始化 Agent"""
@@ -88,7 +88,7 @@ class FastAgent(IBaseAgent):
             tool_call_found = False
             final_answer = None
 
-            async for event in self.run_llm_with_tools(
+            async for event in run_llm_with_tools(
                     self.backbone_llm_client,
                     messages,
                     tools
@@ -97,6 +97,7 @@ class FastAgent(IBaseAgent):
                 if event["event"] == "tool_call":
                     tool_call_found = True
                     call = event["tool_call"]
+                    print(f"❕发现工具调用: {call}")
 
                     # 1. 执行 MCP 工具
                     result = await self.mcpClient.call_tool(
@@ -137,7 +138,7 @@ class FastAgent(IBaseAgent):
 
     async def run_basic(self, messages: list[dict[str, Any]], tools: list[dict[str, Any]]) -> dict[str, Any]:
         final_answer = None
-        async for event in self.run_llm_with_tools(
+        async for event in run_llm_with_tools(
                 self.backbone_llm_client,
                 messages,
                 tools
@@ -165,6 +166,8 @@ class FastAgent(IBaseAgent):
 
     async def async_get_pe_and_mcp_tools(self, session_id: str, user_query: str, extra_prompt: str = ''):
         # ✅ 统一创建 Task 对象
+        tasks = []
+
         pe_task = asyncio.create_task(self.peClient.build_prompt(
             session_id=session_id,
             user_query=user_query,
@@ -173,19 +176,21 @@ class FastAgent(IBaseAgent):
             stream=False
         ))
 
+        tasks.append(pe_task)
+
         # 空协程，用于占位
         async def empty_coroutine():
             return self.mcp_tool_cache
 
-        if self.mcp_tool_cache is None:
-            mcp_task = asyncio.create_task(self.mcpClient.get_tools())
+        if len(self.mcp_tool_cache) == 0:
+            tasks.append(self.mcpClient.get_tools())
         else:
-            mcp_task = asyncio.create_task(empty_coroutine())
+            tasks.append(empty_coroutine())
 
         # 并行执行
         try:
             results = await asyncio.wait_for(
-                asyncio.gather(pe_task, mcp_task, return_exceptions=True),
+                asyncio.gather(*tasks, return_exceptions=True),
                 timeout=5
             )
 
