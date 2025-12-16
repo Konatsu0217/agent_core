@@ -5,8 +5,6 @@ from typing import Dict, Any, List
 import copy
 
 from mem0 import Memory
-from global_statics import PROJECT_PATH
-
 
 class MemoryManager:
     """
@@ -138,7 +136,7 @@ class MemoryManager:
                 "config": {
                     "collection_name": ms.get("collection_name", "mem0_collection"),
                     "path": str(
-                        Path(PROJECT_PATH) / "vector_memory_database"),
+                        os.curdir + "/" + "vector_memory_database"),
                     "distance_strategy": ms.get("distance_strategy", "euclidean"),
                     "embedding_model_dims": ms.get("embedding_model_dims", 1024),
                 },

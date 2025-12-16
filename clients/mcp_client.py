@@ -5,6 +5,8 @@ from typing import Any, Dict, List, AsyncGenerator, Optional
 
 import httpx
 
+from core.agent_interface import IBaseAgent
+
 
 class MCPHubClient:
     """

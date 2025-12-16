@@ -154,6 +154,11 @@ async def get_ws_session_id():
         "session_id": session_id
     }
 
+@app.get("/get_tool_list")
+async def get_tool_list(session_id: str = Query()):
+    return fast_agent.mcp_tool_cache
+
+
 @app.websocket("/ws/agent/query")
 async def websocket_agent_query(websocket: WebSocket, session_id: str = Query()):
     await websocket.accept()
@@ -175,6 +180,8 @@ async def websocket_agent_query(websocket: WebSocket, session_id: str = Query())
                 continue
 
             session_id = request_json.get("session_id", session_id)
+
+            # session_id 获取会话维度的 历史消息、记忆、工具列表与可用性
 
             # 代理请求
             response = await fast_agent.process(AgentRequest(query=user_input, session_id=session_id))
