@@ -6,6 +6,7 @@ import os
 from pathlib import Path
 from typing import Dict, Any, Optional
 from utils.config_schemas import CoreConfig
+from utils.logger import get_logger
 
 
 class ConfigManager:
@@ -99,9 +100,9 @@ class ConfigManager:
                         except Exception:
                             continue
 
-            print(f"配置加载成功: {cls._config}")
+            get_logger().info(f"配置加载成功: {cls._config}")
         except Exception as e:
-            print(f"配置文件加载失败: {str(e)}")
+            get_logger().error(f"配置文件加载失败: {str(e)}")
             # 使用默认配置作为后备（不包含敏感信息）
             cls._config = {
                 # 服务器默认配置
@@ -143,7 +144,7 @@ class ConfigManager:
                 'rag_config': {'url': cls._config['rag_url']},
                 'mcphub_config': {'url': cls._config['mcphub_url'], 'port': 9000},
             }
-            print(f"使用默认配置: {cls._config}")
+            get_logger().info(f"使用默认配置: {cls._config}")
             if cls._config['backbone_llm_openapi_key'] == "":
                 env_key = os.getenv('BACKBONE_LLM_API_KEY', '')
                 if env_key:

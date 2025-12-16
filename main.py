@@ -28,7 +28,7 @@ from utils.connet_manager import PlayWSManager
 async def lifespan(app: FastAPI):
     """应用生命周期管理"""
     # 启动时执行
-    logger.info("🚀 Agent Core 服务器启动中...")
+    logger.info("Agent Core 服务器启动中...")
 
     # 加载配置
     config = global_statics.global_config
@@ -37,7 +37,7 @@ async def lifespan(app: FastAPI):
     yield
 
     # 关闭时执行
-    logger.info("🛑 Agent Core 服务器关闭中...")
+    logger.info("Agent Core 服务器关闭中...")
 
 
 # 创建FastAPI应用
@@ -162,8 +162,7 @@ async def get_tool_list(session_id: str = Query()):
 @app.websocket("/ws/agent/query")
 async def websocket_agent_query(websocket: WebSocket, session_id: str = Query()):
     await websocket.accept()
-
-    print("Session =", session_id)
+    logger.info(f"WebSocket会话 {session_id} 已建立")
     await connect_manager.cache_websocket(session_id, websocket)
 
     try:
@@ -191,10 +190,10 @@ async def websocket_agent_query(websocket: WebSocket, session_id: str = Query())
 
             # 后台任务
             t1 = asyncio.create_task(get_tts_chunk(text, session_id))
-            t1.add_done_callback(lambda t: print("TTS finished", t.exception()))
+            t1.add_done_callback(lambda t: logger.info(f"TTS finished: {t.exception()}"))
 
             t2 = asyncio.create_task(generate_vrma(text, session_id))
-            t2.add_done_callback(lambda t: print("VRMA finished", t.exception()))
+            t2.add_done_callback(lambda t: logger.info(f"VRMA finished: {t.exception()}"))
 
             await websocket.send_json({
                 "role": "assistant",
@@ -204,10 +203,10 @@ async def websocket_agent_query(websocket: WebSocket, session_id: str = Query())
 
     except WebSocketDisconnect:
         await connect_manager.uncache_websocket(session_id)
-        print("WebSocket client disconnected")
+        logger.info("WebSocket client disconnected")
 
     except Exception as e:
-        print("Error:", e)
+        logger.error(f"WebSocket error: {e}")
 
 
 async def play_tts(text: str, session_id: str):
@@ -240,7 +239,7 @@ def main():
     """主函数，启动服务器"""
     config = ConfigManager.get_config()
 
-    print(f"启动主服务: http://0.0.0.0:{config['port']}")
+    logger.info(f"启动主服务: http://0.0.0.0:{config['port']}")
 
     uvicorn.run(
         "main:app",

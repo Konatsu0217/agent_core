@@ -32,7 +32,7 @@ class TTSStateTracker:
         }
 
 logger = get_logger()
-tts_state_tracker = TTSStateTracker(eventBus)
+tts_state_tracker = TTSStateTracker(logger)
 
 # TTS引擎工厂
 tts_engines = {
