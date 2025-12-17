@@ -28,7 +28,7 @@
 
 ### 1. 整体结构
 
-```python
+```asiic
 agent_core/
 ├── core/
 │   ├── orchestrator.py          # 主入口

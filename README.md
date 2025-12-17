@@ -3,6 +3,7 @@
 
 环境都配置好之后，run_all.py 即可启动所有服务(包括前端)
 
+
 ## 大纲请看 agent_core_guide.md 感谢claude（
 ```
 agent_core/
@@ -106,3 +107,16 @@ openapi_key = 生成一个，别泄漏，扣钱的
 
 - 需要先启动MCP服务，运行 ./mcp_server/mcp_server_example.py
 - 再启动mcp_hub服务端，运行 mcp_center_server.py
+
+# RoadMap
+
+## 短期
+- [ ] 解耦RAG，独立模块调用
+- [ ] 改进agent整个的架构，参考 [深水区](https://www.zhihu.com/column/c_1955378545019823972)
+- [ ] 创建agent_router, fine-tune Qwen-3-0.6B作为路由模型，根据输入选择合适的agent
+- [ ] 尝试更多的骨骼动画模型，尝试部署和回收反馈，评估bad case
+
+## 长期
+- [ ] 实现ReAct Agent ---> core/react_agent.py
+- [ ] 实现Plan-and-Solve Agent ---> core/plan_agent.py
+- [ ] 外挂视觉能力 ---> tools/vision
