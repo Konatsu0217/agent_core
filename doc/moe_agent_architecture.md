@@ -54,7 +54,7 @@ agent_core/
 ### Module 1: Agent Interface (统一接口)
 
 ```python
-# core/agent_interface.py
+# core/abs_agent.py
 from abc import ABC, abstractmethod
 from models.agent_request import AgentRequest
 from models.agent_response import AgentResponse
@@ -84,7 +84,8 @@ class BaseAgent(ABC):
 
 ```python
 # core/fast_agent.py
-from core.agent_interface import BaseAgent
+from core.abs_agent import BaseAgent
+
 
 class FastAgent(BaseAgent):
     """
@@ -93,29 +94,29 @@ class FastAgent(BaseAgent):
     - 单轮调用，不使用工具
     - 适合简单问答、闲聊、已知信息查询
     """
-    
+
     def __init__(self, settings: AgentSettings):
         self.llm_client = LLMClient(
             model="gpt-3.5-turbo",  # 或 claude-3-haiku
             temperature=0.7
         )
         self.context_cache = {}  # 内置上下文缓存
-    
+
     async def process(self, request: AgentRequest) -> AgentResponse:
         """单轮快速响应"""
         # 1. 检查缓存
         if cache_hit := self._check_cache(request.user_query):
             return cache_hit
-        
+
         # 2. 构建简单 prompt
         messages = self._build_simple_messages(request)
-        
+
         # 3. 单次 LLM 调用
         response = await self.llm_client.chat_completion(messages)
-        
+
         # 4. 缓存结果
         self._cache_response(request.user_query, response)
-        
+
         return AgentResponse(
             request_id=request.request_id,
             text_output=response["choices"][0]["message"]["content"],
@@ -126,7 +127,7 @@ class FastAgent(BaseAgent):
                 "cached": False
             }
         )
-    
+
     def get_capabilities(self) -> dict:
         return {
             "type": "fast",
@@ -138,21 +139,21 @@ class FastAgent(BaseAgent):
                 "礼貌性回复", "情感回应"
             ]
         }
-    
+
     def estimate_cost(self, request: AgentRequest) -> dict:
         return {
             "time_ms": 300,
             "tokens": 150,
             "price_usd": 0.0002
         }
-    
+
     def _build_simple_messages(self, request: AgentRequest) -> list:
         """构建不带工具的简单消息"""
         return [
             {
                 "role": "system",
-                "content": self.context_cache.get("system_prompt", 
-                    "你是一个友好的AI助手，提供简洁准确的回答。")
+                "content": self.context_cache.get("system_prompt",
+                                                  "你是一个友好的AI助手，提供简洁准确的回答。")
             },
             {
                 "role": "user",
@@ -167,8 +168,9 @@ class FastAgent(BaseAgent):
 
 ```python
 # core/slow_agent.py
-from core.agent_interface import BaseAgent
+from core.abs_agent import BaseAgent
 from handlers.tool_call_handler import ToolCallHandler
+
 
 class SlowAgent(BaseAgent):
     """
@@ -177,7 +179,7 @@ class SlowAgent(BaseAgent):
     - 多轮工具调用
     - 适合复杂任务、需要推理和规划的场景
     """
-    
+
     def __init__(self, settings: AgentSettings):
         self.llm_client = LLMClient(
             model="gpt-4-turbo",  # 或 claude-3-5-sonnet
@@ -186,7 +188,7 @@ class SlowAgent(BaseAgent):
         self.tool_handler = ToolCallHandler(settings)
         self.pe_client = PEClient(settings)
         self.mcp_client = MCPClient(settings)
-    
+
     async def process(self, request: AgentRequest) -> AgentResponse:
         """ReAct 多轮推理"""
         # 1. 调用 PE 构建完整请求（包含工具、RAG）
@@ -194,50 +196,50 @@ class SlowAgent(BaseAgent):
             session_id=request.session_id,
             user_query=request.user_query
         )
-        
+
         # 2. ReAct 循环
         messages = llm_request["messages"]
         tools = llm_request["tools"]
-        
+
         max_iterations = 5
         iteration_logs = []
-        
+
         for i in range(max_iterations):
             # Thought + Action
             response = await self.llm_client.chat_completion(
                 messages=messages,
                 tools=tools
             )
-            
+
             iteration_logs.append({
                 "iteration": i + 1,
                 "thought": response.get("content"),
                 "tool_calls": response.get("tool_calls")
             })
-            
+
             # 检查是否需要工具调用
             if not response.get("tool_calls"):
                 break
-            
+
             # Observation: 执行工具
             tool_results = await self.tool_handler.execute_tools(
                 response["tool_calls"]
             )
-            
+
             # 更新 messages
             messages.append({
                 "role": "assistant",
                 "content": response.get("content"),
                 "tool_calls": response["tool_calls"]
             })
-            
+
             for result in tool_results:
                 messages.append({
                     "role": "tool",
                     "tool_call_id": result["id"],
                     "content": json.dumps(result["output"])
                 })
-        
+
         return AgentResponse(
             request_id=request.request_id,
             text_output=response["choices"][0]["message"]["content"],
@@ -249,7 +251,7 @@ class SlowAgent(BaseAgent):
                 "iteration_logs": iteration_logs
             }
         )
-    
+
     def get_capabilities(self) -> dict:
         return {
             "type": "slow",
@@ -261,7 +263,7 @@ class SlowAgent(BaseAgent):
                 "数据分析", "代码生成", "深度问答"
             ]
         }
-    
+
     def estimate_cost(self, request: AgentRequest) -> dict:
         return {
             "time_ms": 5000,

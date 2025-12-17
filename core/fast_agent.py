@@ -9,7 +9,7 @@ from clients.llm_client import static_llmClientManager
 from clients.mcp_client import MCPHubClient
 from clients.mem0ai_client import MemoryManager
 from clients.pe_client import PEClient
-from core.agent_interface import IBaseAgent, run_llm_with_tools
+from core.abs_agent import IBaseAgent, run_llm_with_tools, ExecutionMode
 from global_statics import global_config
 from models.agent_data_models import AgentRequest, AgentResponse
 
@@ -17,7 +17,12 @@ from models.agent_data_models import AgentRequest, AgentResponse
 class FastAgent(IBaseAgent):
     """快速 Agent 实现"""
 
-    def __init__(self, extra_prompt: Optional[str] = None, name: str = "fast_agent", use_tools: bool = True):
+    def __init__(self, extra_prompt: Optional[str] = None,
+                 work_flow_type: ExecutionMode = ExecutionMode.TEST,
+                 name: str = "fast_agent",
+                 use_tools: bool = True,
+                 output_format: str = "json"):
+        super().__init__(name=name, work_flow_type=work_flow_type, use_tools=use_tools, output_format=output_format)
         """初始化 Agent"""
         self.extra_prompt: Optional[str] = extra_prompt
 
@@ -95,6 +100,7 @@ class FastAgent(IBaseAgent):
             "role": "assistant",
             "content": self.response_cache['response']
         }]
+        self.response_cache.clear()
         logging.info(f"add memory: {messages}")
         loop = asyncio.get_running_loop()
         loop.run_in_executor(
