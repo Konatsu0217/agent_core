@@ -126,3 +126,6 @@ Desktop.ini
 *.bvh
 *.vrma
 .trae/
+.vector_memory_database/
+*.faiss
+*.pkl

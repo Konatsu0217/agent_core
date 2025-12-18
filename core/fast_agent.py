@@ -1,21 +1,25 @@
 import asyncio
 import json
+import logging
 import uuid
+from pyexpat.errors import messages
 from typing import Any, Optional
 
 from clients.llm_client import static_llmClientManager
 from clients.mcp_client import MCPHubClient
+from clients.mem0ai_client import MemoryManager
 from clients.pe_client import PEClient
-from core.agent_interface import IBaseAgent
+from core.agent_interface import IBaseAgent, run_llm_with_tools
 from global_statics import global_config
 from models.agent_data_models import AgentRequest, AgentResponse
 
 
 class FastAgent(IBaseAgent):
     """快速 Agent 实现"""
+
     def __init__(self, extra_prompt: Optional[str] = None, name: str = "fast_agent", use_tools: bool = True):
         """初始化 Agent"""
-        self.extra_prompt : Optional[str] = extra_prompt
+        self.extra_prompt: Optional[str] = extra_prompt
 
         self.backbone_llm_client = static_llmClientManager.get_client()
         # 初始化mcp管理中心客户端
@@ -26,8 +30,10 @@ class FastAgent(IBaseAgent):
         # 聊天内容的后处理，先返回再异步处理tts等后续工作
         self.response_cache: dict[str, str] = {}
 
+        self.mem = MemoryManager()
+
         self.use_tools = use_tools
-        self.mcp_tool_cache = {}
+        self.mcp_tool_cache = []
 
     async def initialize(self):
         """初始化 Agent"""
@@ -64,19 +70,38 @@ class FastAgent(IBaseAgent):
 
         if self.use_tools:
             result = await self.run_with_tools(messages, tools)
-        else :
+        else:
             result = await self.run_basic(messages, tools)
 
-        result_json= json.loads(result)
+        result_json = json.loads(result)
         # 用来存聊天记录
         self.response_cache['query'] = request.query
         self.response_cache['response'] = result_json.get('response', '')
         self.response_cache['action'] = result_json.get('action', '')
         self.response_cache['expression'] = result_json.get('expression', '')
 
+        asyncio.create_task(self.add_memory(request.session_id))
+
         return AgentResponse(
             response=result_json,
             session_id=request.session_id
+        )
+
+    async def add_memory(self, session_id: str) -> None:
+        messages = [{
+            "role": "user",
+            "content": self.response_cache['query']
+        }, {
+            "role": "assistant",
+            "content": self.response_cache['response']
+        }]
+        logging.info(f"add memory: {messages}")
+        loop = asyncio.get_running_loop()
+        loop.run_in_executor(
+            None,  # 默认 ThreadPoolExecutor
+            self.mem.add,
+            messages,
+            session_id
         )
 
     async def run_with_tools(self, messages: list[dict[str, Any]], tools: list[dict[str, Any]]) -> dict[str, Any]:
@@ -88,7 +113,7 @@ class FastAgent(IBaseAgent):
             tool_call_found = False
             final_answer = None
 
-            async for event in self.run_llm_with_tools(
+            async for event in run_llm_with_tools(
                     self.backbone_llm_client,
                     messages,
                     tools
@@ -97,6 +122,7 @@ class FastAgent(IBaseAgent):
                 if event["event"] == "tool_call":
                     tool_call_found = True
                     call = event["tool_call"]
+                    print(f"❕发现工具调用: {call}")
 
                     # 1. 执行 MCP 工具
                     result = await self.mcpClient.call_tool(
@@ -134,10 +160,9 @@ class FastAgent(IBaseAgent):
         # 超出最大循环
         return {"error": "Exceeded max ReAct steps"}
 
-
     async def run_basic(self, messages: list[dict[str, Any]], tools: list[dict[str, Any]]) -> dict[str, Any]:
         final_answer = None
-        async for event in self.run_llm_with_tools(
+        async for event in run_llm_with_tools(
                 self.backbone_llm_client,
                 messages,
                 tools
@@ -165,6 +190,8 @@ class FastAgent(IBaseAgent):
 
     async def async_get_pe_and_mcp_tools(self, session_id: str, user_query: str, extra_prompt: str = ''):
         # ✅ 统一创建 Task 对象
+        tasks = []
+
         pe_task = asyncio.create_task(self.peClient.build_prompt(
             session_id=session_id,
             user_query=user_query,
@@ -173,23 +200,29 @@ class FastAgent(IBaseAgent):
             stream=False
         ))
 
+        tasks.append(pe_task)
+
+        rag_task = asyncio.create_task(self.mem.search(query=user_query, user_id=session_id, limit=5))
+
+        tasks.append(rag_task)
+
         # 空协程，用于占位
         async def empty_coroutine():
             return self.mcp_tool_cache
 
-        if self.mcp_tool_cache is None:
-            mcp_task = asyncio.create_task(self.mcpClient.get_tools())
+        if len(self.mcp_tool_cache) == 0:
+            tasks.append(self.mcpClient.get_tools())
         else:
-            mcp_task = asyncio.create_task(empty_coroutine())
+            tasks.append(empty_coroutine())
 
         # 并行执行
         try:
             results = await asyncio.wait_for(
-                asyncio.gather(pe_task, mcp_task, return_exceptions=True),
+                asyncio.gather(*tasks, return_exceptions=True),
                 timeout=5
             )
 
-            llm_request_response, self.mcp_tool_cache = results
+            llm_request_response, rag_results, self.mcp_tool_cache = results
 
             # ✅ 处理异常
             if isinstance(llm_request_response, Exception):
@@ -199,10 +232,19 @@ class FastAgent(IBaseAgent):
             if isinstance(self.mcp_tool_cache, Exception):
                 print(f"⚠️ MCPHubClient get_tools failed: {self.mcp_tool_cache}")
                 self.mcp_tool_cache = []
+                return
+
+            if isinstance(rag_results, Exception):
+                print(f"⚠️ Mem0Client search failed: {rag_results}")
+                rag_results = []
+                return
 
             # ✅ 正确提取数据
             llm_request = llm_request_response.get('llm_request', {})
             messages = llm_request.get('messages', [])
+
+            if rag_results:
+                messages[0]['content'] += f"\n\n[Relevant Memory]: {rag_results} \n\n"
 
             print(f"✅ PE build_prompt messages: {messages}")
             print(f"✅ Available tools: {self.mcp_tool_cache}")

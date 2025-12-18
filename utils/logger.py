@@ -2,6 +2,8 @@ import logging
 import os
 import time
 from threading import Lock
+from pathlib import Path
+from logging.handlers import RotatingFileHandler
 
 class Logger:
     _instance = None
@@ -25,32 +27,32 @@ class Logger:
                 if self.logger.hasHandlers():
                     self.logger.handlers.clear()
 
-                # 确保日志目录存在
-                log_dir = "./logs"
+                base_dir = Path(__file__).resolve().parents[1]
+                env_log_dir = os.getenv("APP_LOG_DIR")
+                log_dir = Path(env_log_dir) if env_log_dir else (base_dir / "logs")
                 os.makedirs(log_dir, exist_ok=True)
                 
-                # 创建带时间戳的日志文件路径
-                timestamp = time.time()
-                log_path = os.path.join(log_dir, f"backend_{timestamp}.log")
+                pid = os.getpid()
+                log_path = str(log_dir / f"backend_{pid}.log")
 
-                # 创建文件处理器
-                file_handler = logging.FileHandler(log_path, mode='a')
+                file_handler = RotatingFileHandler(log_path, maxBytes=10 * 1024 * 1024, backupCount=5)
                 file_handler.setLevel(logging.INFO)
 
                 # 设置日志格式
                 formatter = logging.Formatter(
-                    "%(asctime)s - %(levelname)s - %(message)s",
+                    "%(asctime)s - %(levelname)s - pid=%(process)d - %(name)s - %(message)s",
                     datefmt="%Y-%m-%d %H:%M:%S"
                 )
                 file_handler.setFormatter(formatter)
 
-                # 添加文件处理器
                 self.logger.addHandler(file_handler)
 
-                # 添加控制台处理器
                 console_handler = logging.StreamHandler()
                 console_handler.setFormatter(formatter)
                 self.logger.addHandler(console_handler)
+
+                # 禁止向根logger传播，避免重复输出
+                self.logger.propagate = False
 
                 # 测试日志
                 self.logger.info("===== 日志系统初始化成功 ======")
