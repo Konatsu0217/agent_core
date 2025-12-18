@@ -40,7 +40,8 @@ agent_core/
 │
 ├── utils/                       # 工具函数
 │   ├── __init__.py
-│   ├── config_manager.py        # 配置管理模块
+│   ├── config_schemas.py        # 统一配置
+│   ├── config_manager.py        # 配置管理模块(准备废弃)
 │   ├── connet_manager.py        # 连接管理模块
 │   └── logger.py                # 日志配置模块
 │
@@ -58,16 +59,12 @@ agent_core/
 │   ├── model_speed_test.md
 │   └── moe_agent_architecture.md
 │
-├── mcp_servers_config.json
-├── pe_config.json
-│
-├── tts/                         # 顶层 TTS 模块
-│   ├── __init__.py
-│   ├── function_call_way.py
-│   ├── net_request_way_server.py
-│   ├── stream_audio_player.py
-│   ├── tts_config.json
-│   └── tts_engines.py
+├── config/                         # 统一配置
+│   ├── core.json
+│   ├── mcp_server.json
+│   ├── motion.json
+│   ├── pe.json
+│   └── tts.json
 │
 ├── test/                        # 测试文件
 │   ├── test_basic_agent.py
@@ -120,3 +117,5 @@ openapi_key = 生成一个，别泄漏，扣钱的
 - [ ] 实现ReAct Agent ---> core/react_agent.py
 - [ ] 实现Plan-and-Solve Agent ---> core/plan_agent.py
 - [ ] 外挂视觉能力 ---> tools/vision
+
+

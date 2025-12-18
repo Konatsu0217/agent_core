@@ -59,7 +59,7 @@ app.add_middleware(
 
 fast_agent = FastAgent(use_tools=True)
 connect_manager = PlayWSManager()
-vrma_files_dir = '/Users/bytedance/Desktop/explore_tech/agent_repo/agent_core/tools/motion_drive/'
+vrma_files_dir = 'tools/motion_drive/'
 app.mount("/vrma_files", StaticFiles(directory=vrma_files_dir), name="vrma_files")
 
 
