@@ -10,9 +10,6 @@ class OneShotAgent(IBaseAgent):
                  use_tools: bool = True,
                  output_format: str = "json"):
         super().__init__(name=name, work_flow_type=work_flow_type, use_tools=use_tools, output_format=output_format)
-        """初始化 Agent"""
-        print("OneShotAgent Not Implemented")
-        raise Exception("OneShotAgent Not Implemented")
 
     async def process(self, request: AgentRequest) -> AgentResponse:
         pass
@@ -27,7 +24,8 @@ class OneShotAgent(IBaseAgent):
         pass
 
     def initialize(self):
-        pass
-
+        """初始化 Agent"""
+        print("OneShotAgent Not Implemented")
+        raise Exception("OneShotAgent Not Implemented")
 
 

@@ -4,6 +4,14 @@
 
 
 # about LLM
+## 架构
+- Decoder Only
+- RoPE / 1-Hot?
+- KV-Cache: 缓存已经计算过的key-value对，避免重复计算
+- FlashAttention?
+- RMSNorm
+- GQA
+
 ## 训练/微调
 - SFT: 全量
 - PEFT: LoRA/QLoRA

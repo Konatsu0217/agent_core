@@ -10,9 +10,6 @@ class PlanAndSolveAgent(IBaseAgent):
                  use_tools: bool = True,
                  output_format: str = "json"):
         super().__init__(name=name, work_flow_type=work_flow_type, use_tools=use_tools, output_format=output_format)
-        """初始化 Agent"""
-        print("PlanAndSolveAgent Not Implemented")
-        raise Exception("PlanAndSolveAgent Not Implemented")
 
     async def process(self, request: AgentRequest) -> AgentResponse:
         pass
@@ -27,4 +24,6 @@ class PlanAndSolveAgent(IBaseAgent):
         pass
 
     def initialize(self):
-        pass
+        """初始化 Agent"""
+        print("PlanAndSolveAgent Not Implemented")
+        raise Exception("PlanAndSolveAgent Not Implemented")
