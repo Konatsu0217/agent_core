@@ -9,6 +9,7 @@ from clients.llm_client import static_llmClientManager
 from clients.mcp_client import MCPHubClient
 from clients.mem0ai_client import MemoryManager
 from clients.pe_client import PEClient
+from clients.session_manager import get_session_manager
 from core.abs_agent import IBaseAgent, run_llm_with_tools, ExecutionMode
 from global_statics import global_config
 from models.agent_data_models import AgentRequest, AgentResponse
@@ -67,25 +68,33 @@ class FastAgent(IBaseAgent):
     async def process(self, request: AgentRequest) -> AgentResponse:
         """处理用户请求"""
         # 工具和pe
-        messages, tools = await self.async_get_pe_and_mcp_tools(
-            session_id=request.session_id,
-            user_query=self.warp_query(request.query),
-            extra_prompt=self.extra_prompt if self.extra_prompt is not None else "",
-        )
 
-        if self.use_tools:
-            result = await self.run_with_tools(messages, tools)
-        else:
-            result = await self.run_basic(messages, tools)
+        try:
+            if self.extra_prompt is None:
+                self.extra_prompt = ""
 
-        result_json = json.loads(result)
-        # 用来存聊天记录
-        self.response_cache['query'] = request.query
-        self.response_cache['response'] = result_json.get('response', '')
-        self.response_cache['action'] = result_json.get('action', '')
-        self.response_cache['expression'] = result_json.get('expression', '')
+            messages, tools = await self.async_get_pe_and_mcp_tools(
+                session_id=request.session_id,
+                user_query=self.warp_query(request.query),
+                extra_prompt=self.extra_prompt,
+            )
 
-        asyncio.create_task(self.add_memory(request.session_id))
+            if self.use_tools:
+                result = await self.run_with_tools(messages, tools)
+            else:
+                result = await self.run_with_tools(messages, [])
+
+            result_json = json.loads(result)
+            # 用来存聊天记录
+            self.response_cache['query'] = request.query
+            self.response_cache['response'] = result_json.get('response', '')
+            self.response_cache['action'] = result_json.get('action', '')
+            self.response_cache['expression'] = result_json.get('expression', '')
+
+            asyncio.create_task(self.add_memory(request.session_id))
+
+        except Exception as e:
+            print(f"❌ Unexpected error: {e.__traceback__}")
 
         return AgentResponse(
             response=result_json,
@@ -168,15 +177,19 @@ class FastAgent(IBaseAgent):
 
     async def run_basic(self, messages: list[dict[str, Any]], tools: list[dict[str, Any]]) -> dict[str, Any]:
         final_answer = None
-        async for event in run_llm_with_tools(
-                self.backbone_llm_client,
-                messages,
-                tools
-        ):
-            # ======== 最终输出 ========
-            if event["event"] == "final_content":
-                final_answer = event["content"]
-                continue
+
+        try:
+            async for event in run_llm_with_tools(
+                    self.backbone_llm_client,
+                    messages,
+                    tools
+            ):
+                # ======== 最终输出 ========
+                if event["event"] == "final_content":
+                    final_answer += event["content"]
+                    continue
+        except Exception as e:
+            print(f"❌ Unexpected error: {e.with_traceback()}")
 
         return final_answer
 
@@ -221,6 +234,9 @@ class FastAgent(IBaseAgent):
         else:
             tasks.append(empty_coroutine())
 
+        session_manager = get_session_manager()
+        tasks.append(session_manager.get_session(session_id, "DefaultAgent"))
+
         # 并行执行
         try:
             results = await asyncio.wait_for(
@@ -228,7 +244,7 @@ class FastAgent(IBaseAgent):
                 timeout=5
             )
 
-            llm_request_response, rag_results, self.mcp_tool_cache = results
+            llm_request_response, rag_results, self.mcp_tool_cache, session_history = results
 
             # ✅ 处理异常
             if isinstance(llm_request_response, Exception):
@@ -248,6 +264,10 @@ class FastAgent(IBaseAgent):
             # ✅ 正确提取数据
             llm_request = llm_request_response.get('llm_request', {})
             messages = llm_request.get('messages', [])
+
+            if session_history:
+                session_messages = session_history.get('messages', [])
+                messages = messages[:-1] + session_messages + messages[-1:]
 
             if rag_results:
                 messages[0]['content'] += f"\n\n[Relevant Memory]: {rag_results} \n\n"

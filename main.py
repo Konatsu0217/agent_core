@@ -22,6 +22,7 @@ from handlers.vrma_handler import VRMAHandler
 from models.agent_data_models import AgentRequest
 from utils.config_manager import ConfigManager
 from utils.connet_manager import PlayWSManager
+from clients.session_manager import get_session_manager
 
 
 @asynccontextmanager
@@ -57,8 +58,9 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-fast_agent = FastAgent(use_tools=True)
+fast_agent = FastAgent(use_tools=False)
 connect_manager = PlayWSManager()
+session_manager = get_session_manager()
 vrma_files_dir = 'tools/motion_drive/'
 app.mount("/vrma_files", StaticFiles(directory=vrma_files_dir), name="vrma_files")
 
@@ -187,6 +189,10 @@ async def websocket_agent_query(websocket: WebSocket, session_id: str = Query())
 
             raw = response.response
             text = raw.get("response", "") if isinstance(raw, dict) else str(raw)
+
+            # 缓存会话历史记录
+            asyncio.create_task(session_manager.add_session_value(session_id,agent_id="DefaultAgent", value={"role": "user", "content": user_input}))
+            asyncio.create_task(session_manager.add_session_value(session_id,agent_id="DefaultAgent", value={"role": "assistant", "content": text}))
 
             # 后台任务
             t1 = asyncio.create_task(get_tts_chunk(text, session_id))
