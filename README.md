@@ -1,7 +1,15 @@
 # 快速开始
+### 安装程序依赖
+```bash
+pip install -r requirements.txt
+```
+### 安装前端界面依赖
+```bash
+cd webUI
+npm install
+```
 
-
-环境都配置好之后，run_all.py 即可启动所有服务(包括前端)
+环境都配置好之后，回到根目录执行 run_all.py 即可启动所有服务(包括前端)
 
 
 ## 大纲请看 agent_core_guide.md 感谢claude（
