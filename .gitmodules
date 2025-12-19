@@ -10,3 +10,6 @@
 [submodule "webUI"]
 	path = webUI
 	url = https://github.com/Konatsu0217/agent_fe_vibe_all
+[submodule "tools/danmaku_proxy_service"]
+	path = tools/danmaku_proxy_service
+	url = https://github.com/Konatsu0217/danmaku_proxy_server

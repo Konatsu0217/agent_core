@@ -9,6 +9,7 @@ import time
 import uuid
 from contextlib import asynccontextmanager
 
+import requests
 import uvicorn
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
@@ -22,6 +23,8 @@ from handlers.tts_handler import TTSHandler
 from fastapi.staticfiles import StaticFiles
 from handlers.vrma_handler import VRMAHandler
 from models.agent_data_models import AgentRequest
+from models.danmaku_models import DanmakuData
+from tools.danmaku_proxy_service.danmaku_proxy import DanmakuRequest, can_consume
 from utils.config_manager import ConfigManager
 from utils.connet_manager import PlayWSManager
 from clients.session_manager import get_session_manager
@@ -162,6 +165,33 @@ async def get_ws_session_id():
 async def get_tool_list(session_id: str = Query()):
     return fast_agent.mcp_tool_cache
 
+
+@app.post("/api/danmaku/consume")
+async def consume_danmaku(data: DanmakuData):
+    logger.info(f"consume danmaku: {data}")
+    return {"status": "success"}
+
+@app.post("/api/consumption-status")
+async def check_consumption_status():
+    logger.info(f"check_consumption_status")
+    can_consume = True
+    return {"can_consume": can_consume}
+
+
+@app.post("/send_danmaku")
+async def send_danmaku(data: DanmakuData):  # 这里要改，对齐bilibli
+    logger.info(f"Main Server Received danmaku: {data}")
+    request = requests.post(
+        "danmaku_proxy_url",
+        timeout=5,
+        headers={'Content-Type': 'application/json'},
+        json=data.dict()
+    )
+    if request.status_code != 200:
+        logger.error(f"Failed to send danmaku: {request.text}")
+        raise HTTPException(status_code=500, detail="Failed to send danmaku")
+
+    return {"status": "success"}
 
 @app.websocket("/ws/agent/query")
 async def websocket_agent_query(websocket: WebSocket, session_id: str = Query()):
@@ -315,8 +345,8 @@ async def get_tts_chunk(text: str, session_id: str):
 
 # 修改generate_vrma函数
 async def generate_vrma(text: str, session_id: str) -> str:
-    filename = await VRMAHandler.generate_vrma(text)
-    # filename = "pick_something_up_from_ground.vrma"
+    # filename = await VRMAHandler.generate_vrma(text)
+    filename = "pick_something_up_from_ground.vrma"
     # 构建Web可访问的URL
     timestamp = int(time.time() * 1000)
     vrma_url = f"/vrma_files/{filename}"
