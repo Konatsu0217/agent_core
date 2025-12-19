@@ -3,7 +3,9 @@ Agent Core 主服务器
 基于FastAPI的基础服务器骨架
 """
 import asyncio
+import base64
 import json
+import time
 import uuid
 from contextlib import asynccontextmanager
 
@@ -201,11 +203,16 @@ async def websocket_agent_query(websocket: WebSocket, session_id: str = Query())
             t2 = asyncio.create_task(generate_vrma(text, session_id))
             t2.add_done_callback(lambda t: logger.info(f"VRMA finished: {t.exception()}"))
 
-            await websocket.send_json({
-                "role": "assistant",
-                "content": text,
-                "status": "success"
-            })
+            chat_msg = {
+                "type": "chat_message_reply",
+                "data": {
+                    "role": "assistant",
+                    "content": text,
+                    "status": "success"
+                }
+            }
+
+            await websocket.send_text(json.dumps(chat_msg))
 
     except WebSocketDisconnect:
         await connect_manager.uncache_websocket(session_id)
@@ -221,24 +228,110 @@ async def play_tts(text: str, session_id: str):
 async def get_tts_chunk(text: str, session_id: str):
     async_gen = TTSHandler.handle_tts_for_chunk(text)
 
-    async for chunk in async_gen:
-        await connect_manager.send_chunk_to(session_id, chunk)
+    audio_cache = {}
 
-    # 所有块发送完毕
-    await connect_manager.send_msg_to(session_id, json.dumps({
-        "type": "tts_end",
-        "session_id": session_id
-    }))
+    # 通知开始 TTS
+    msg = {
+        "type": "ttsStarted",
+        "data": {"text": text},
+        "timestamp": int(time.time() * 1000)
+    }
+    await connect_manager.send_msg_to(
+        session_id, json.dumps(msg)
+    )
+
+    BUFFER_SIZE = 10 * 1024  # 10KB
+    audio_buffer = bytearray()
+
+    chunk_index = 0
+
+    async for chunk in async_gen:
+        if not chunk:
+            continue
+
+        audio_buffer.extend(chunk)
+
+        # 够 10KB 就发
+        while len(audio_buffer) >= BUFFER_SIZE:
+            send_bytes = audio_buffer[:BUFFER_SIZE]
+            del audio_buffer[:BUFFER_SIZE]
+
+            timestamp = int(time.time() * 1000)
+            audio_id = f"chunk_{chunk_index}_{timestamp}"
+
+            # ✅ 1. 缓存 raw audio（给后续可能的重放 / 补发）
+            audio_cache[audio_id] = audio_buffer
+
+            # ✅ 2. base64 编码
+            audio_base64 = base64.b64encode(send_bytes).decode("utf-8")
+
+            # ✅ 3. 构造【最终 VRM 消息】
+            vrm_msg = {
+                "type": "startSpeaking",
+                "data": {
+                    "audioId": audio_id,
+                    "audioData": audio_base64,
+                    "useBase64": True,
+                    "chunkIndex": chunk_index,
+                    "expressions": []
+                },
+                "timestamp": timestamp
+            }
+
+            # ✅ 4. 直接广播到所有 VRM
+            await connect_manager.send_msg_to(
+                session_id, json.dumps(vrm_msg)
+            )
+
+            chunk_index += 1
+
+        await asyncio.sleep(0.01)
+
+    # ===== flush：不足 10KB 的尾巴 =====
+    if audio_buffer:
+        timestamp = int(time.time() * 1000)
+        audio_id = f"chunk_{chunk_index}_{timestamp}"
+
+        audio_cache[audio_id] = audio_buffer
+
+        audio_base64 = base64.b64encode(audio_buffer).decode("utf-8")
+
+        vrm_msg = {
+            "type": "startSpeaking",
+            "data": {
+                "audioId": audio_id,
+                "audioData": audio_base64,
+                "useBase64": True,
+                "chunkIndex": chunk_index,
+                "expressions": []
+            },
+            "timestamp": timestamp
+        }
+
+        await connect_manager.send_msg_to(
+            session_id, json.dumps(vrm_msg)
+        )
+
 
 # 修改generate_vrma函数
 async def generate_vrma(text: str, session_id: str) -> str:
     filename = await VRMAHandler.generate_vrma(text)
+    # filename = "pick_something_up_from_ground.vrma"
     # 构建Web可访问的URL
+    timestamp = int(time.time() * 1000)
     vrma_url = f"/vrma_files/{filename}"
-    await connect_manager.send_json_to(session_id, {
-        "type": "vrma_action",
-        "url": vrma_url
-    })
+    vrm_msg = {
+        "type": "vrmaStarted",
+        "data": {
+            "url": vrma_url,
+        },
+        "timestamp": timestamp
+    }
+
+    await connect_manager.send_msg_to(
+        session_id, json.dumps(vrm_msg)
+    )
+
 
 
 def main():

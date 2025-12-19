@@ -13,7 +13,7 @@ import httpx
 import websockets
 from typing import Optional
 
-import generate_tts_audio
+from tools.tts.function_call_way import generate_tts_audio
 
 # 配置日志
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -275,7 +275,7 @@ if __name__ == "__main__":
     print("🚀 TTS到WebSocket中继服务 - 简化版本")
     print("=" * 60)
     print("📡 TTS服务器: http://localhost:8000/tts")
-    print("🔗 WebSocket: ws://localhost:3456/ws/vrm")
+    print("🔗 WebSocket: ws://localhost:5175/ws/vrm")
     print("=" * 60)
 
     try:

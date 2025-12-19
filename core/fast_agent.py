@@ -272,8 +272,6 @@ class FastAgent(IBaseAgent):
             if rag_results:
                 messages[0]['content'] += f"\n\n[Relevant Memory]: {rag_results} \n\n"
 
-            print(f"✅ PE build_prompt messages: {messages}")
-            print(f"✅ Available tools: {self.mcp_tool_cache}")
             return messages, self.mcp_tool_cache
 
         except asyncio.TimeoutError:
