@@ -27,7 +27,7 @@ async def run_all():
     main_service = None
 
     try:
-        mcp_example_service = subprocess.Popen(["python3", "tools/mcp_hub/mcp_servers/mcp_server_example.py"],
+        mcp_example_service = subprocess.Popen(["python3", "tools/mcp_hub/mcp_server/mcp_server_example.py"],
                                        cwd=str(BASE_DIR), env=env)
 
         logger.info("mcp_example_service 已启动")

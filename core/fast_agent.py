@@ -5,6 +5,9 @@ import uuid
 from pyexpat.errors import messages
 from typing import Any, Optional
 
+import json_repair
+from json_repair import repair_json
+
 from clients.llm_client import static_llmClientManager
 from clients.mcp_client import MCPHubClient
 from clients.mem0ai_client import MemoryManager
@@ -84,7 +87,7 @@ class FastAgent(IBaseAgent):
             else:
                 result = await self.run_with_tools(messages, [])
 
-            result_json = json.loads(result)
+            result_json = json_repair.loads(result)
             # 用来存聊天记录
             self.response_cache['query'] = request.query
             self.response_cache['response'] = result_json.get('response', '')

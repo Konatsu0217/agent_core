@@ -17,7 +17,7 @@
     "embedding_model": "BAAI/bge-large-zh-v1.5",
     "embedding_model_url": "https://api.siliconflow.cn/v1",
     "embedding_api_key": "",
-    "intent_recognition_model": "deepseek-ai/DeepSeek-R1-0528-Qwen3-8B",
+    "intent_recognition_model": "THUDM/GLM-4.1V-9B-Thinking",
     "intent_recognition_url": "https://api.siliconflow.cn/v1",
     "intent_recognition_api_key": "",
     "distance_strategy": "euclidean",
