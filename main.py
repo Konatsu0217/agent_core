@@ -212,12 +212,14 @@ async def websocket_agent_query(websocket: WebSocket, session_id: str = Query())
             if not user_input:
                 continue
 
+            # session_id 获取会话维度的 历史消息、记忆、工具列表与可用性
             session_id = request_json.get("session_id", session_id)
 
-            # session_id 获取会话维度的 历史消息、记忆、工具列表与可用性
+            # 允许传入图片，list[base64]，
+            imgBase64: list[str] = request_json.get("images_b64", [])
 
             # 代理请求
-            response = await fast_agent.process(AgentRequest(query=user_input, session_id=session_id))
+            response = await fast_agent.process(AgentRequest(query=user_input, extraInfo={"images_b64": imgBase64}, session_id=session_id))
 
             raw = response.response
             text = raw.get("response", "") if isinstance(raw, dict) else str(raw)
