@@ -48,4 +48,4 @@ class Proto:
         else:
             return
 
-
+# add_danmaku_inner(danmaku_data, danmaku_type)

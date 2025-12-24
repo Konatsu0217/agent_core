@@ -25,3 +25,29 @@
 #   },
 #   "cmd": "LIVE_OPEN_PLATFORM_DM"
 # }
+
+# enum 弹幕类型
+DANMU_TYPE = {
+    "LIVE_OPEN_PLATFORM_DM": "普通弹幕",
+    "LIVE_OPEN_PLATFORM_SUPER_CHAT": "醒目留言",
+    "LIVE_OPEN_PLATFORM_SEND_GIFT": "礼物",
+    "LIVE_OPEN_PLATFORM_GUARD": "购买舰长"
+}
+
+# if danmu_type == "danmaku":
+#     content = f'{uname}发送弹幕：{message}'
+# elif danmu_type == "super_chat":
+#     content = f'{uname}发送SuperChat：{message}'
+# elif danmu_type == "gift":
+#     content = f'{uname}发送礼物：{message}'
+# elif danmu_type == "buy_guard":
+#     content = f'{uname}购买舰长：{message}'
+# else:
+#     content = f'{uname}发送{danmu_type}：{message}'
+
+# add_danmaku_inner(danmaku_data, danmaku_type)
+# danmaku_data: {
+#         'content': data.msg,
+#         'danmu_type': DANMU_TYPE,
+#         'timestamp': time.time()
+#     }
