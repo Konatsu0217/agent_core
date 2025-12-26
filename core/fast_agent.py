@@ -94,7 +94,8 @@ class FastAgent(IBaseAgent):
             self.response_cache['action'] = result_json.get('action', '')
             self.response_cache['expression'] = result_json.get('expression', '')
 
-            asyncio.create_task(self.add_memory(request.session_id))
+            if request.extraInfo.get("add_memory", True):
+                asyncio.create_task(self.add_memory(request.session_id))
 
         except Exception as e:
             print(f"❌ Unexpected error: {e.__traceback__}")
@@ -124,6 +125,7 @@ class FastAgent(IBaseAgent):
 
     async def run_with_tools(self, messages: list[dict[str, Any]], tools: list[dict[str, Any]]) -> dict[str, Any]:
         MAX_STEPS = 10  # 防死循环
+        call_count = 0
 
         for _ in range(MAX_STEPS):
 
@@ -141,6 +143,7 @@ class FastAgent(IBaseAgent):
                     tool_call_found = True
                     call = event["tool_call"]
                     print(f"❕发现工具调用: {call}")
+                    call_count += 1
 
                     # 1. 执行 MCP 工具
                     result = await self.mcpClient.call_tool(
@@ -150,12 +153,15 @@ class FastAgent(IBaseAgent):
                     )
 
                     # 2. 将工具结果加入 messages
-                    messages.append({
-                        "role": "tool",
-                        "tool_call_id": call["id"],
-                        "content": json.dumps(result),
-                    })
+                    if result.get("success") == False:
+                        messages.append({
+                            "role": "user",
+                            "content": f"工具调用 {call['id']} 失败：{result.get('error', '')}"
+                        })
+                        continue
 
+                    msg = result.get("result").get("data")
+                    asyncio.run(self.append_tool_call(messages, call, msg))
                     # 注意：不要 break —— event 的流要读完
                     continue
 
@@ -177,6 +183,30 @@ class FastAgent(IBaseAgent):
 
         # 超出最大循环
         return {"error": "Exceeded max ReAct steps"}
+
+    @staticmethod
+    async def append_tool_call(messages, call, msg):
+        # 先插入 tool 消息
+        messages.append({
+            "role": "tool",
+            "tool_call_id": call["id"],
+            "content": msg,
+        })
+        # 再插入 assistant(tool_call) 消息
+        messages.insert(-1, {
+            "role": "assistant",
+            "content": "",
+            "tool_calls": [
+                {
+                    "id": call["id"],
+                    "type": "function",
+                    "function": {
+                        "name": call["function"]["name"],
+                        "arguments": json.dumps(call["function"]["arguments"])
+                    }
+                }
+            ]
+        })
 
     async def run_basic(self, messages: list[dict[str, Any]], tools: list[dict[str, Any]]) -> dict[str, Any]:
         final_answer = None

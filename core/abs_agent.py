@@ -13,6 +13,8 @@ async def run_llm_with_tools(llm_client, messages, tools):
     current_tool_name = None
     tool_call_id = None
 
+
+
     async for raw in llm_client.chat_completion_stream(
             messages=messages,
             tools=tools
@@ -59,6 +61,7 @@ async def run_llm_with_tools(llm_client, messages, tools):
                     args = tool_call_accumulator[cid]["function"]["arguments"]
                     parsed = json.loads(args)
                     # 如果成功解析 → yield 出去让外部执行
+                    # messages.append(response.choices[0].message)
                     yield {
                         "event": "tool_call",
                         "tool_call": {
