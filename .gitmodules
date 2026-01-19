@@ -9,7 +9,7 @@
 	url =  git@github.com:Konatsu0217/bvh_converter_service.git
 [submodule "webUI"]
 	path = webUI
-	url =  git@github.com:Konatsu0217/agent_fe_vibe_all
+	url =  git@github.com:Konatsu0217/agent_fe_vibe_all.git
 [submodule "tools/danmaku_proxy_service"]
 	path = tools/danmaku_proxy_service
-	url =  git@github.com:Konatsu0217/danmaku_proxy_server
+	url =  git@github.com:Konatsu0217/danmaku_proxy_server.git
