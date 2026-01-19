@@ -1,6 +1,4 @@
 ### 核心目录结构
-
-```text
 agent_core/
 ├── main.py                      # Agent Core 主服务入口
 ├── run_all.py                   # 一键启动脚本（同时启动所有微服务和前端）
