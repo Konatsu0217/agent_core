@@ -18,19 +18,19 @@ from fastapi.params import Query
 from starlette.websockets import WebSocketDisconnect, WebSocket
 
 import global_statics
-from core.fast_agent import FastAgent
+from src.agent.fast_agent import FastAgent
 from global_statics import logger
-from handlers.tts_handler import TTSHandler
+from src.infrastructure.handlers.tts_handler import TTSHandler
 from fastapi.staticfiles import StaticFiles
-from handlers.vrma_handler import VRMAHandler
-from models.agent_data_models import AgentRequest
-from models.danmaku_models import DanmakuData
+from src.infrastructure.handlers.vrma_handler import VRMAHandler
+from src.domain.models.agent_data_models import AgentRequest
+from src.domain.models.danmaku_models import DanmakuData
 from test.test_proactive_module import DemoProactiveModule
 
 from tools.danmaku_proxy_service.danmaku_proxy import DanmakuRequest, can_consume
-from utils.config_manager import ConfigManager
-from utils.connet_manager import PlayWSManager
-from clients.session_manager import get_session_manager
+from src.shared.config.config_manager import ConfigManager
+from src.shared.utils.connet_manager import PlayWSManager
+from src.infrastructure.clients.session_manager import get_session_manager
 
 
 @asynccontextmanager

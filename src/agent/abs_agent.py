@@ -2,7 +2,7 @@ import json
 from abc import ABC, abstractmethod
 from enum import Enum
 
-from models.agent_data_models import AgentRequest, AgentResponse
+from src.domain.models.agent_data_models import AgentRequest, AgentResponse
 
 
 async def run_llm_with_tools(llm_client, messages, tools):
@@ -12,8 +12,6 @@ async def run_llm_with_tools(llm_client, messages, tools):
     current_type = None
     current_tool_name = None
     tool_call_id = None
-
-
 
     async for raw in llm_client.chat_completion_stream(
             messages=messages,
@@ -56,7 +54,6 @@ async def run_llm_with_tools(llm_client, messages, tools):
                 if call["function"]["arguments"]:
                     tool_call_accumulator[cid]["function"]["arguments"] += call["function"]["arguments"]
 
-                # ⭐ 关键：检测 JSON 是否完整
                 try:
                     args = tool_call_accumulator[cid]["function"]["arguments"]
                     parsed = json.loads(args)

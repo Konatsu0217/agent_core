@@ -8,14 +8,14 @@ from typing import Any, Optional
 import json_repair
 from json_repair import repair_json
 
-from clients.llm_client import static_llmClientManager
-from clients.mcp_client import MCPHubClient
-from clients.mem0ai_client import MemoryManager
-from clients.pe_client import PEClient
-from clients.session_manager import get_session_manager
-from core.abs_agent import IBaseAgent, run_llm_with_tools, ExecutionMode
+from src.infrastructure.clients.llm_client import static_llmClientManager
+from src.infrastructure.clients.mcp_client import MCPHubClient
+from src.infrastructure.clients.mem0ai_client import MemoryManager
+from src.infrastructure.clients.pe_client import PEClient
+from src.infrastructure.clients.session_manager import get_session_manager
+from src.agent.abs_agent import IBaseAgent, run_llm_with_tools, ExecutionMode
 from global_statics import global_config
-from models.agent_data_models import AgentRequest, AgentResponse
+from src.domain.models.agent_data_models import AgentRequest, AgentResponse
 
 
 class FastAgent(IBaseAgent):
@@ -66,7 +66,7 @@ class FastAgent(IBaseAgent):
 
     def warp_query(self, query: str) -> str:
         """包装用户查询，添加必要的上下文"""
-        return f"用户查询: {query}, system: 你的回复必须为json格式{{'response': '你的回复','action': '简短、精准地表述你要做的肢体动作，使用英文','expression': '从我为你提供的tool_type = resource中选择表情(可选，如果未提供则为空字符串)'}}"
+        return f"用户查询: {query}, system: 你的回复必须为json格式{{\"response\": \"你的回复\",\"action\": \"简短、精准地表述你要做的肢体动作，使用英文\",\"expression\": \"从我为你提供的tool_type = resource中选择表情(可选，如果未提供则为空字符串)\"}}"
 
     async def process(self, request: AgentRequest) -> AgentResponse:
         """处理用户请求"""
@@ -89,10 +89,10 @@ class FastAgent(IBaseAgent):
 
             result_json = json_repair.loads(result)
             # 用来存聊天记录
-            self.response_cache['query'] = request.query
-            self.response_cache['response'] = result_json.get('response', '')
-            self.response_cache['action'] = result_json.get('action', '')
-            self.response_cache['expression'] = result_json.get('expression', '')
+            self.response_cache["query"] = request.query
+            self.response_cache["response"] = result_json.get("response", "")
+            self.response_cache["action"] = result_json.get("action", "")
+            self.response_cache["expression"] = result_json.get("expression", "")
 
             if request.extraInfo.get("add_memory", True):
                 asyncio.create_task(self.add_memory(request.session_id))
@@ -108,10 +108,10 @@ class FastAgent(IBaseAgent):
     async def add_memory(self, session_id: str) -> None:
         messages = [{
             "role": "user",
-            "content": self.response_cache['query']
+            "content": self.response_cache["query"]
         }, {
             "role": "assistant",
-            "content": self.response_cache['response']
+            "content": self.response_cache["response"]
         }]
         self.response_cache.clear()
         logging.info(f"add memory: {messages}")
@@ -156,12 +156,12 @@ class FastAgent(IBaseAgent):
                     if result.get("success") == False:
                         messages.append({
                             "role": "user",
-                            "content": f"工具调用 {call['id']} 失败：{result.get('error', '')}"
+                            "content": f"工具调用 {call["id"]} 失败：{result.get("error", "")}"
                         })
                         continue
 
                     msg = result.get("result").get("data")
-                    asyncio.run(self.append_tool_call(messages, call, msg))
+                    await self.append_tool_call(messages, call, msg)
                     # 注意：不要 break —— event 的流要读完
                     continue
 
@@ -240,7 +240,7 @@ class FastAgent(IBaseAgent):
             "tokens": 99999  # 假设每个请求 10 个 Token
         }
 
-    async def async_get_pe_and_mcp_tools(self, session_id: str, user_query: str, extra_prompt: str = ''):
+    async def async_get_pe_and_mcp_tools(self, session_id: str, user_query: str, extra_prompt: str = ""):
         # ✅ 统一创建 Task 对象
         tasks = []
 
@@ -295,15 +295,15 @@ class FastAgent(IBaseAgent):
                 return
 
             # ✅ 正确提取数据
-            llm_request = llm_request_response.get('llm_request', {})
-            messages = llm_request.get('messages', [])
+            llm_request = llm_request_response.get("llm_request", {})
+            messages = llm_request.get("messages", [])
 
             if session_history:
-                session_messages = session_history.get('messages', [])
+                session_messages = session_history.get("messages", [])
                 messages = messages[:-1] + session_messages + messages[-1:]
 
             if rag_results:
-                messages[0]['content'] += f"\n\n[Relevant Memory]: {rag_results} \n\n"
+                messages[0]["content"] += f"\n\n[Relevant Memory]: {rag_results} \n\n"
 
             return messages, self.mcp_tool_cache
 

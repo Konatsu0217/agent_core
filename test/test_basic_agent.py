@@ -1,9 +1,9 @@
 import asyncio
 
-from core.fast_agent import FastAgent
-from handlers.tts_handler import TTSHandler
-from handlers.vrma_handler import VRMAHandler
-from models.agent_data_models import AgentRequest
+from src.agent.fast_agent import FastAgent
+from src.infrastructure.handlers.tts_handler import TTSHandler
+from src.infrastructure.handlers.vrma_handler import VRMAHandler
+from src.domain.models.agent_data_models import AgentRequest
 
 async def main(mock_input: str):
     await fast_agent.initialize()

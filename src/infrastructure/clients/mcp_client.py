@@ -5,7 +5,7 @@ from typing import Any, Dict, List, AsyncGenerator, Optional
 
 import httpx
 
-from core.abs_agent import IBaseAgent
+from src.agent.abs_agent import IBaseAgent
 
 
 class MCPHubClient:
