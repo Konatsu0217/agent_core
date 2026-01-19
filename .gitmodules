@@ -1,15 +1,15 @@
 [submodule "tools/mcp_hub"]
 	path = tools/mcp_hub
-	url = https://github.com/Konatsu0217/agent_mcp_hub.git
+	url =  git@github.com:Konatsu0217/agent_mcp_hub.git
 [submodule "tools/pe_server"]
 	path = tools/pe_server
-	url = https://github.com/Konatsu0217/agent_pe_server.git
+	url =  git@github.com:Konatsu0217/agent_pe_server.git
 [submodule "tools/bvh_converter"]
 	path = tools/bvh_converter
-	url = https://github.com/Konatsu0217/bvh_converter_service.git
+	url =  git@github.com:Konatsu0217/bvh_converter_service.git
 [submodule "webUI"]
 	path = webUI
-	url = https://github.com/Konatsu0217/agent_fe_vibe_all
+	url =  git@github.com:Konatsu0217/agent_fe_vibe_all
 [submodule "tools/danmaku_proxy_service"]
 	path = tools/danmaku_proxy_service
-	url = https://github.com/Konatsu0217/danmaku_proxy_server
+	url =  git@github.com:Konatsu0217/danmaku_proxy_server
