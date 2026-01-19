@@ -10,7 +10,6 @@ from src.agent.abs_agent import IBaseAgent
 
 class MCPHubClient:
     """
-    Client for your MCP Hub (matches README endpoints).
     - GET  /mcp_hub/servers      -> get_servers()
     - GET  /mcp_hub/tools        -> get_tools()
     - GET  /mcp_hub/health       -> health()

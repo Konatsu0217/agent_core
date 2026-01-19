@@ -7,7 +7,7 @@ from starlette.responses import JSONResponse
 
 from global_statics import tts_engines, tts_config
 from src.shared.utils.connet_manager import PlayWSManager
-from src.shared.logging.logger import get_logger
+from src.infrastructure.utils import get_logger
 
 # 4. 创建FastAPI应用实例
 app = FastAPI(

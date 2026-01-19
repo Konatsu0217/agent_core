@@ -33,7 +33,7 @@ async def run_all():
         logger.info("mcp_example_service 已启动")
         time.sleep(3)
 
-        pe_service = subprocess.Popen(["python3", "tools/pe_server/main.py"], cwd=str(BASE_DIR), env=env)
+        pe_service = subprocess.Popen(["python3", "tools/pe_server/run.py"], cwd=str(BASE_DIR), env=env)
 
         logger.info("pe_service 已启动")
         time.sleep(3)
