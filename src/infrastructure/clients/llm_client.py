@@ -164,7 +164,6 @@ class LLMClient:
         logger.info("LLMClient连接已关闭")
 
     def __del__(self):
-        """析构函数，尝试关闭连接"""
         try:
             if hasattr(self, 'client') and self.client:
                 logger.debug("LLMClient实例销毁")

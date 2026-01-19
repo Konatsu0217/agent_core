@@ -1,4 +1,5 @@
 import json
+import uuid
 from datetime import datetime, timedelta
 # from utils.logger import get_logger
 
@@ -11,10 +12,10 @@ class SessionManager:
     """
 
     def __init__(self):
-        self.active_sessions = {}
-        self.update_time = {}
+        self.active_sessions: dict[str, dict[str, list[dict[str, str]]]] = {}
+        self.update_time: dict[str, datetime] = {}
 
-    def get_session(self, session_id: str, agent_id: str, limit: int = 0) -> dict[str, list[dict[str, str]]]:
+    async def get_session(self, session_id: str, agent_id: str, limit: int = 0) -> dict[str, list[dict[str, str]]]:
         """
         读取历史记录
 
@@ -29,7 +30,7 @@ class SessionManager:
         if session_id in self.active_sessions:
             agent_session = self.active_sessions[session_id]
             if agent_id in agent_session:
-                self._update_last_used(session_id, agent_id)
+                await self._update_last_used(session_id, agent_id)
                 if limit > 0:
                     count = min(limit, len(agent_session[agent_id]))
                     return {"messages": agent_session[agent_id][0:count]}
@@ -37,7 +38,7 @@ class SessionManager:
                     return {"messages": agent_session[agent_id]}
         return {}
 
-    def get_all_sessions(self) -> list[dict[str, any]]:
+    async def get_all_sessions(self) -> list[dict[str, any]]:
         """
         读取全量历史记录
 
@@ -69,7 +70,7 @@ class SessionManager:
                 })
         return result
 
-    def add_session_value(self, session_id: str, agent_id: str, value: dict[str, str]):
+    async def add_session_value(self, session_id: str, agent_id: str, value: dict[str, str]):
         """
         添加历史记录
 
@@ -90,9 +91,9 @@ class SessionManager:
             agent_session = self.active_sessions[session_id]
             agent_session[agent_id] = []
             agent_session[agent_id].append(value)
-        self._update_last_used(session_id, agent_id)
+        await self._update_last_used(session_id, agent_id)
 
-    def modify_session_value(self, session_id: str, agent_id: str, value: list[dict[str, str]]):
+    async def modify_session_value(self, session_id: str, agent_id: str, value: list[dict[str, str]]):
         """
         全量修改历史记录
 
@@ -108,9 +109,9 @@ class SessionManager:
             self.active_sessions[session_id] = {}
             agent_session = self.active_sessions[session_id]
             agent_session[agent_id] = value
-        self._update_last_used(session_id, agent_id)
+        await self._update_last_used(session_id, agent_id)
 
-    def delete_session(self, session_id: str, agent_id: str = None) -> bool:
+    async def delete_session(self, session_id: str, agent_id: str = None) -> bool:
         """
         清空session历史记录
 
@@ -124,17 +125,17 @@ class SessionManager:
         if session_id in self.active_sessions:
             if not agent_id:
                 del self.active_sessions[session_id]
-                self._delete_last_used(session_id)
+                await self._delete_last_used(session_id)
                 return True
             else:
                 agent_session = self.active_sessions[session_id]
                 if agent_id in agent_session:
                     del agent_session[agent_id]
-                    self._delete_last_used(session_id, agent_id)
+                    await self._delete_last_used(session_id, agent_id)
                     return True
         return False
 
-    def clean_old_sessions(self, expired_days: int = 30) -> int:
+    async def clean_old_sessions(self, expired_days: int = 30) -> int:
         """
         清理过期的历史记录
 
@@ -155,10 +156,10 @@ class SessionManager:
                     delete_agents.append(agent_id)
                     count += 1
             for agent_id in delete_agents:
-                self.delete_session(session_id, agent_id)
+                await self.delete_session(session_id, agent_id)
         return count
 
-    def _update_last_used(self, session_id: str, agent_id: str):
+    async def _update_last_used(self, session_id: str, agent_id: str):
         """
         更新记录最近使用时间
 
@@ -174,7 +175,7 @@ class SessionManager:
             agent_session_update_time = self.update_time[session_id]
             agent_session_update_time[agent_id] = datetime.utcnow()
 
-    def _delete_last_used(self, session_id: str, agent_id: str = None):
+    async def _delete_last_used(self, session_id: str, agent_id: str = None):
         """
         删除最近使用时间
 
@@ -189,6 +190,12 @@ class SessionManager:
                 agent_session_update_time = self.update_time[session_id]
                 if agent_id in agent_session_update_time:
                     del agent_session_update_time[agent_id]
+
+
+manager = SessionManager()
+
+def get_session_manager():
+    return manager
 
 
 if __name__ == "__main__":

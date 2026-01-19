@@ -9,6 +9,9 @@ class PlayWSManager:
     def __init__(self):
         self.cache: Dict[str, WebSocket] = {}
 
+    async def get_websocket(self, session_id: str) -> WebSocket:
+        return self.cache.get(session_id)
+
     async def cache_websocket(self, session_id: str, websocket: WebSocket):
         self.cache[session_id] = websocket
         logging.info(f"Main interface connected. Total: {len(self.cache)}")

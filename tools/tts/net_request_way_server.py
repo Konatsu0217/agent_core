@@ -6,8 +6,8 @@ from pydantic import BaseModel, Field
 from starlette.responses import JSONResponse
 
 from global_statics import tts_engines, tts_config
-from utils.connet_manager import PlayWSManager
-from utils.logger import get_logger
+from src.shared.utils.connet_manager import PlayWSManager
+from src.infrastructure.utils import get_logger
 
 # 4. 创建FastAPI应用实例
 app = FastAPI(

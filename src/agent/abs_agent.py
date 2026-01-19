@@ -1,7 +1,8 @@
 import json
 from abc import ABC, abstractmethod
+from enum import Enum
 
-from models.agent_data_models import AgentRequest, AgentResponse
+from src.domain.models.agent_data_models import AgentRequest, AgentResponse
 
 
 async def run_llm_with_tools(llm_client, messages, tools):
@@ -53,11 +54,11 @@ async def run_llm_with_tools(llm_client, messages, tools):
                 if call["function"]["arguments"]:
                     tool_call_accumulator[cid]["function"]["arguments"] += call["function"]["arguments"]
 
-                # ⭐ 关键：检测 JSON 是否完整
                 try:
                     args = tool_call_accumulator[cid]["function"]["arguments"]
                     parsed = json.loads(args)
                     # 如果成功解析 → yield 出去让外部执行
+                    # messages.append(response.choices[0].message)
                     yield {
                         "event": "tool_call",
                         "tool_call": {
@@ -86,9 +87,24 @@ async def run_llm_with_tools(llm_client, messages, tools):
             }
             return
 
+class ExecutionMode(Enum):
+    TEST = "test"
+    ONE_SHOT = "one-shot"
+    REACT = "ReAct"
+    PLAN_AND_SOLVE = "Plan-and-Solve"
+
 
 class IBaseAgent(ABC):
     """所有 Agent 的统一接口"""
+    def __init__(self, name: str, work_flow_type: ExecutionMode, use_tools: bool = True, output_format: str = "json"):
+        # Agent 名称
+        self.name = name
+        # 工作模式：one-shot / ReAct / Plan-and-Solve
+        self.work_flow_type = work_flow_type
+        # 是否启用工具
+        self.use_tools = use_tools
+        # 是否格式化输出，如果有格式化输出自己处理格式解析
+        self.output_format = output_format
 
     @abstractmethod
     def initialize(self):

@@ -5,7 +5,7 @@ import subprocess
 import time
 import traceback
 from pathlib import Path
-from utils.logger import get_logger
+from src.shared.logging.logger import get_logger
 
 
 async def run_all():
@@ -27,13 +27,13 @@ async def run_all():
     main_service = None
 
     try:
-        mcp_example_service = subprocess.Popen(["python3", "tools/mcp_hub/mcp_servers/mcp_server_example.py"],
+        mcp_example_service = subprocess.Popen(["python3", "tools/mcp_hub/mcp_server/mcp_server_example.py"],
                                        cwd=str(BASE_DIR), env=env)
 
         logger.info("mcp_example_service 已启动")
         time.sleep(3)
 
-        pe_service = subprocess.Popen(["python3", "tools/pe_server/main.py"], cwd=str(BASE_DIR), env=env)
+        pe_service = subprocess.Popen(["python3", "tools/pe_server/run.py"], cwd=str(BASE_DIR), env=env)
 
         logger.info("pe_service 已启动")
         time.sleep(3)
@@ -60,7 +60,8 @@ async def run_all():
         if frontend_cmd is None:
             raise RuntimeError("未找到可用的包管理器：npm/pnpm/yarn")
         webui_service = subprocess.Popen(frontend_cmd, cwd=str(webui_dir), env=env)
-        logger.info("webUI 已启动: http://localhost:5173/")
+        time.sleep(2)
+        logger.info("webUI 已启动: http://localhost:5174/ (如果端口被占用会自动切换)")
         state = True
 
     except Exception as e:
