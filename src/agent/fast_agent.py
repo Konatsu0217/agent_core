@@ -2,13 +2,11 @@ import asyncio
 import json
 import logging
 import uuid
-from pyexpat.errors import messages
 from typing import Any, Optional
 
 import json_repair
-from json_repair import repair_json
 
-from src.infrastructure.clients.llm_client import static_llmClientManager
+from src.infrastructure.clients.llm_clients.llm_client_manager import static_llmClientManager
 from src.infrastructure.clients.mcp_client import MCPHubClient
 from src.infrastructure.clients.mem0ai_client import MemoryManager
 from src.infrastructure.clients.pe_client import PEClient
@@ -66,7 +64,7 @@ class FastAgent(IBaseAgent):
 
     def warp_query(self, query: str) -> str:
         """包装用户查询，添加必要的上下文"""
-        return f"用户查询: {query}, system: 你的回复必须为json格式{{\"response\": \"你的回复\",\"action\": \"简短、精准地表述你要做的肢体动作，使用英文\",\"expression\": \"从我为你提供的tool_type = resource中选择表情(可选，如果未提供则为空字符串)\"}}"
+        return f"用户查询: {query}, system: 你的回复必须为json格式{{\"response\": \"你的回复\",\"action\": \"简短、精准地表述你要做的肢体动作，使用英文\",\"expression\": \"从我为你提供的tool_type = resource中选择表情(可选，如果未提供则为空字符串)\"}} \n/no_think"
 
     async def process(self, request: AgentRequest) -> AgentResponse:
         """处理用户请求"""
