@@ -9,11 +9,7 @@ src/
 ├── agent/                      # Agent核心领域
 │   ├── __init__.py
 │   ├── abs_agent.py           # Agent抽象基类
-│   ├── fast_agent.py          # 快速Agent实现
-│   ├── one_shot_agent.py      # 单次Agent实现
-│   ├── react_agent.py         # ReAct Agent实现
-│   ├── plan_and_solve_agent.py # Plan-and-Solve Agent实现
-│   └── basic_work_flow.py     # 基础工作流
+│   └── fast_agent.py          # 快速Agent实现
 │
 ├── infrastructure/            # 基础设施层
 │   ├── clients/               # 外部服务客户端
@@ -77,10 +73,11 @@ shared → (被所有层使用)
 ```
 
 ### 3. 导入规范
+
 ```python
 # ✅ 正确：从src开始绝对导入
 from src.agent.fast_agent import FastAgent
-from src.infrastructure.clients.llm_client import LLMClientManager
+from src.infrastructure.clients.llm_clients.llm_client import LLMClientManager
 from src.domain.models.agent_data_models import AgentRequest
 from src.shared.config.config_manager import ConfigManager
 
@@ -127,41 +124,7 @@ from ...infrastructure.clients.llm_client import LLMClientManager
 | `utils/` | `src/shared/` (按类型细分) | ✅ 已完成 |
 | 旧目录删除 | `core/`, `clients/`, `handlers/`, `models/`, `utils/` | ✅ 已完成 |
 
-## 💡 Java/Kotlin开发者适配指南
-
-### 1. 包结构对比
-```java
-// Java风格
-com.example.agent.core
-com.example.agent.infrastructure.clients
-com.example.agent.domain.models
-com.example.agent.interfaces.api
-com.example.agent.shared.config
-```
-
-```python
-# Python风格（本项目）
-src.agent
-src.infrastructure.clients
-src.domain.models
-src.interfaces.api
-src.shared.config
-```
-
-### 2. 导入方式
-```java
-// Java
-import com.example.agent.core.FastAgent;
-import com.example.agent.domain.models.AgentRequest;
-```
-
-```python
-# Python
-from src.agent.fast_agent import FastAgent
-from src.domain.models.agent_data_models import AgentRequest
-```
-
-### 3. 类型提示
+### 类型提示
 ```python
 # 添加类型提示，让代码更接近Java的静态类型
 from typing import Optional, List
@@ -172,22 +135,6 @@ class AgentRequest(BaseModel):
     session_id: str
     images_b64: Optional[List[str]] = None
 ```
-
-## 🚀 后续优化建议
-
-### 高优先级
-1. **拆分独立项目**: 将`tools/`下的子项目移到独立仓库
-2. **统一配置管理**: 将分散的配置文件整合
-3. **完善类型提示**: 为所有函数添加类型注解
-
-### 中优先级
-4. **添加单元测试**: 为每个模块编写测试
-5. **文档完善**: 补充API文档和架构文档
-6. **性能优化**: 优化LLM调用和WebSocket处理
-
-### 低优先级
-7. **代码风格统一**: 使用black、isort等工具统一代码风格
-8. **CI/CD配置**: 添加自动化测试和部署流程
 
 ## 📝 注意事项
 

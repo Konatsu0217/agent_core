@@ -8,14 +8,15 @@
     "timeout_keep_alive": 5
   },
   "backbone_llm_config": {
-    "openapi_url": "https://api.siliconflow.cn/v1",
+    "provider": "siliconflow",
+    "openapi_url": "http://localhost:11434/v1",
     "openapi_key": "",
-    "model_name": "Pro/deepseek-ai/DeepSeek-V3.2",
+    "model_name": "qwen3:8b",
     "temperature": 1.2,
     "max_tokens": 1024
   },
   "pe_config": {
-    "url": "ws://0.0.0.0:25535"
+    "url": "ws://0.0.0.0:18080"
   },
   "rag_config": {
     "url": "http://0.0.0.0:25536"

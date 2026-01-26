@@ -1,6 +1,6 @@
 import asyncio
 
-from src.infrastructure.clients.llm_client import LLMClientManager
+from src.infrastructure.clients.llm_clients.llm_client import LLMClientManager
 
 
 if __name__ == "__main__":
