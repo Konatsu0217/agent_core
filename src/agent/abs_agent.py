@@ -112,11 +112,6 @@ class IBaseAgent(ABC):
         pass
 
     @abstractmethod
-    def warp_query(self, query: str) -> str:
-        """包装用户查询，添加必要的上下文"""
-        pass
-
-    @abstractmethod
     async def process(self, request: AgentRequest) -> AgentResponse:
         """处理用户请求，默认过程中流式，最终结果非流式"""
         pass

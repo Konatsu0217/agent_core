@@ -21,11 +21,9 @@ class PePromptService(IPromptService):
     
     async def build_prompt(self, session_id: str, user_query: str, **kwargs) -> Dict[str, Any]:
         """构建提示词"""
-        system_resources = kwargs.get("system_resources", "")
         return await self.peClient.build_prompt(
             session_id=session_id,
             user_query=user_query,
             request_id=str(uuid.uuid4()),
-            system_resources=system_resources,
             stream=False
         )

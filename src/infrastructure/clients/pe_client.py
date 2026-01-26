@@ -87,7 +87,6 @@ class PEClient:
             session_id: str,
             user_query: str,
             request_id: Optional[str] = None,
-            system_resources: Optional[str] = None,
             stream: bool = False
     ) -> Dict[str, Any]:
 
@@ -101,7 +100,6 @@ class PEClient:
             "request_id": request_id,
             "data": {"session_id": session_id,
                      "user_query": user_query,
-                     "system_resources": system_resources,
                      "stream": stream}
         }
 

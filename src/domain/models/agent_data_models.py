@@ -1,5 +1,5 @@
 import uuid
-from typing import Any
+from typing import Any, Optional
 
 from pydantic import BaseModel, Field
 
@@ -10,5 +10,6 @@ class AgentRequest(BaseModel):
     session_id: str = Field(default_factory=lambda: str(uuid.uuid4()))
 
 class AgentResponse(BaseModel):
-    response: dict
+    pure_text: str
+    response: Optional[dict] = None
     session_id: str

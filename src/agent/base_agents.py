@@ -21,10 +21,6 @@ class BaseAgent(IBaseAgent):
         """初始化 Agent"""
         pass
 
-    def warp_query(self, query: str) -> str:
-        """包装用户查询，添加必要的上下文"""
-        return query
-
     async def process(self, request):
         """处理用户请求"""
         # 子类需要实现此方法
