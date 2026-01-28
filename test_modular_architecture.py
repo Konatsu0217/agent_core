@@ -1,5 +1,6 @@
 import asyncio
-from src.agent.fast_agent import FastAgent
+
+from src.agent import AgentFactory
 from src.coordinator.agent_coordinator import AgentCoordinator, TaskDispatcher
 from src.di.container import get_service_container, get_injector
 from src.config.config import ConfigManager
@@ -11,7 +12,7 @@ async def test_fast_agent_initialization():
     print("=== 测试 FastAgent 初始化 ===")
 
     # 创建 FastAgent
-    agent = FastAgent(name="test_fast_agent")
+    agent = await AgentFactory.get_basic_agent()
 
     # 初始化 Agent
     await agent.initialize()
@@ -32,7 +33,7 @@ async def test_agent_coordinator():
     coordinator = AgentCoordinator()
 
     # 创建并注册 FastAgent
-    fast_agent = FastAgent(name="fast_agent")
+    fast_agent = await AgentFactory.get_basic_agent()
     coordinator.register_agent(fast_agent)
 
     # 初始化所有 Agent
@@ -95,7 +96,7 @@ async def test_full_workflow():
     coordinator = AgentCoordinator()
 
     # 创建并注册 FastAgent
-    fast_agent = FastAgent(name="fast_agent")
+    fast_agent = await AgentFactory.get_basic_agent()
     coordinator.register_agent(fast_agent)
 
     # 初始化所有 Agent
@@ -117,10 +118,7 @@ async def test_full_workflow():
 
 async def test_minimal_workflow():
     # 2. 创建最小化 FastAgent
-    agent = FastAgent(
-        name="minimal_agent",
-        use_tools=False  # 禁用工具
-    )
+    agent = await AgentFactory.get_basic_agent()
 
     # 3. 初始化（会打印服务缺失警告，但能继续）
     await agent.initialize()

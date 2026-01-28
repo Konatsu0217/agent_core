@@ -109,7 +109,7 @@ class IBaseAgent(ABC):
         self.output_format = output_format
 
     @abstractmethod
-    def initialize(self):
+    async def initialize(self):
         """初始化 Agent"""
         pass
 
