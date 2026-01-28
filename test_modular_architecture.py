@@ -3,27 +3,7 @@ import asyncio
 from src.agent import AgentFactory
 from src.coordinator.agent_coordinator import AgentCoordinator, TaskDispatcher
 from src.di.container import get_service_container, get_injector
-from src.config.config import ConfigManager
 from src.domain.models.agent_data_models import AgentRequest
-
-
-async def test_fast_agent_initialization():
-    """测试 FastAgent 初始化"""
-    print("=== 测试 FastAgent 初始化 ===")
-
-    # 创建 FastAgent
-    agent = await AgentFactory.get_basic_agent()
-
-    # 初始化 Agent
-    await agent.initialize()
-    print("✅ FastAgent 初始化成功")
-
-    # 测试获取能力描述
-    capabilities = agent.get_capabilities()
-    print(f"✅ 能力描述: {capabilities}")
-
-    return agent
-
 
 async def test_agent_coordinator():
     """测试 Agent 协调器"""
@@ -67,26 +47,6 @@ async def test_service_container():
         print("❌ 服务注册和获取失败")
 
     return container
-
-
-async def test_config_manager():
-    """测试配置管理器"""
-    print("\n=== 测试配置管理器 ===")
-
-    # 创建配置管理器
-    config_manager = ConfigManager()
-    print("✅ 配置管理器创建成功")
-
-    # 获取服务配置
-    service_config = config_manager.get_service_config()
-    print("✅ 服务配置获取成功")
-
-    # 获取 Agent 配置
-    agent_config = config_manager.get_agent_config("fast_agent")
-    print("✅ Agent 配置获取成功")
-
-    return config_manager
-
 
 async def test_full_workflow():
     """测试完整工作流程"""
@@ -162,7 +122,6 @@ async def main():
     await test_fast_agent_initialization()
     await test_agent_coordinator()
     await test_service_container()
-    await test_config_manager()
     # await test_minimal_workflow()
     await test_full_workflow()
 

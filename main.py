@@ -18,7 +18,9 @@ from fastapi.params import Query
 from starlette.websockets import WebSocketDisconnect, WebSocket
 
 import global_statics
-from src.agent.fast_agent import FastAgent
+from src.agent.agent_factory import AgentFactory
+from typing import Optional
+from src.agent.abs_agent import IBaseAgent
 from global_statics import logger
 from src.infrastructure.handlers.tts_handler import TTSHandler
 from fastapi.staticfiles import StaticFiles
@@ -38,6 +40,8 @@ async def lifespan(app: FastAPI):
     """应用生命周期管理"""
     # 启动时执行
     logger.info("Agent Core 服务器启动中...")
+    # 初始化Agent
+    await async_init()
     asyncio.create_task(
         proactive_schedular.run(on_trigger=handle_proactive_trigger)
     )
@@ -68,7 +72,10 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-fast_agent = FastAgent(use_tools=True)
+# 初始化标志
+_services_registered = False
+
+fast_agent: Optional[IBaseAgent] = None
 proactive_schedular = DemoProactiveModule()
 connect_manager = PlayWSManager()
 session_manager = get_session_manager()
@@ -172,7 +179,9 @@ async def get_ws_session_id():
 
 @app.get("/get_tool_list")
 async def get_tool_list(session_id: str = Query()):
-    return fast_agent.mcp_tool_cache
+    if fast_agent.tool_manager:
+        return await fast_agent.tool_manager.get_tools()
+    return []
 
 
 @app.post("/api/danmaku/consume")
@@ -234,8 +243,7 @@ async def websocket_agent_query(websocket: WebSocket, session_id: str = Query())
             imgBase64: list[str] = request_json.get("images_b64", [])
 
             # 代理请求
-            raw_response= await fast_agent.process(
-                AgentRequest(query=user_input, extraInfo={"images_b64": imgBase64}, session_id=session_id))
+            raw_response= await fast_agent.process(request= AgentRequest(query=user_input, extraInfo={"images_b64": imgBase64}, session_id=session_id))
 
             llm_reply = raw_response.response
 
@@ -519,6 +527,32 @@ def main():
 
 
 async def async_init():
+    global _services_registered
+    
+    from src.di.container import get_service_container
+    from src.services.impl.default_query_wrapper_service import DefaultQueryWrapper
+    from src.services.impl.mcp_tool_manager import McpToolManager
+    from src.services.impl.mem0_memory_service import Mem0MemoryService
+    from src.services.impl.pe_prompt_service import PePromptService
+    from src.services.impl.default_session_service import DefaultSessionService
+
+    container = get_service_container()
+
+    # 只有在服务未注册时才注册服务
+    if not _services_registered:
+        # 注册服务
+        container.register("query_wrapper", DefaultQueryWrapper())
+        container.register("tool_manager", McpToolManager())
+        container.register("memory_service", Mem0MemoryService())
+        container.register("prompt_service", PePromptService())
+        container.register("session_service", DefaultSessionService())
+        print("✅ 所有服务注册完成")
+        _services_registered = True
+
+    global fast_agent
+    # 使用AgentFactory创建基于fast_agent_profile.json配置的Agent
+    fast_agent = await AgentFactory.get_basic_agent()
+    # 初始化Agent
     await fast_agent.initialize()
 
 
