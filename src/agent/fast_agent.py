@@ -15,7 +15,7 @@ from src.domain.models.agent_data_models import AgentRequest, AgentResponse
 
 
 class FastAgent(ToolUsingAgent, MemoryAwareAgent):
-    """快速响应 Agent"""
+    """快速响应 Agent, 这是一个样例，不保证能正常工作"""
     
     def __init__(self,
                  work_flow_type: ExecutionMode = ExecutionMode.TEST,

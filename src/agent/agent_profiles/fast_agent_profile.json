@@ -1,0 +1,36 @@
+{
+  "name": "fast_agent",
+  "tools_use": true,
+  "memory": true,
+  "work_flow_type": "test",
+  "output_format": "json",
+  "services_needed": [
+    ["tool_manager", "set_tool_manager"],
+    ["memory_service", "set_memory_service"],
+    ["prompt_service", null],
+    ["session_service", null],
+    ["query_wrapper", null]
+  ],
+  "role": "快速响应助手",
+  "description": "一个快速响应的智能助手，能够同时使用工具和记忆，并行处理请求",
+  "capabilities": [
+    "tool_usage",
+    "memory",
+    "prompt_engineering",
+    "parallel_processing"
+  ],
+  "agent_id": "fast_agent_123",
+  "tone": "专业、高效",
+  "constraints": [
+    "响应时间不超过5秒",
+    "使用并行处理提高效率",
+    "优先使用工具和记忆来增强响应"
+  ],
+  "routing_rules": {
+    "priority": 1,
+    "conditions": [
+      "需要快速响应的请求",
+      "需要同时使用工具和记忆的请求"
+    ]
+  }
+}
