@@ -39,9 +39,12 @@ class BasicAgent(BaseAgent):
         """处理用户请求"""
         try:
             query = request.query
+            session_id = request.session_id
 
-            # 构建消息
-            messages = [{"role": "user", "content": query}]
+            # 使用ContextMaker构建上下文
+            context = await self.build_context(session_id, query, **request.extraInfo)
+            messages = context.get("messages", [{"role": "user", "content": query}])
+            tools = context.get("tools", [])
 
             # 使用工具运行（虽然没有工具）
             from src.agent.abs_agent import run_llm_with_tools
@@ -50,7 +53,7 @@ class BasicAgent(BaseAgent):
             async for event in run_llm_with_tools(
                     self.backbone_llm_client,
                     messages,
-                    []  # 空工具列表
+                    tools  # 使用上下文中的工具列表
             ):
                 if event["event"] == "final_content":
                     result = event["content"]
@@ -113,14 +116,12 @@ class ToolOnlyAgent(ToolUsingAgent):
         """处理用户请求"""
         try:
             query = request.query
+            session_id = request.session_id
 
-            # 获取工具列表
-            tools = []
-            if self.tool_manager:
-                tools = await self.tool_manager.get_tools()
-
-            # 构建消息
-            messages = [{"role": "user", "content": query}]
+            # 使用ContextMaker构建上下文
+            context = await self.build_context(session_id, query, **request.extraInfo)
+            messages = context.get("messages", [{"role": "user", "content": query}])
+            tools = context.get("tools", [])
 
             # 使用工具运行
             result = await self.run_with_tools(messages, tools)
@@ -181,9 +182,12 @@ class MemoryOnlyAgent(MemoryAwareAgent):
         """处理用户请求"""
         try:
             query = request.query
+            session_id = request.session_id
 
-            # 构建消息
-            messages = [{"role": "user", "content": query}]
+            # 使用ContextMaker构建上下文
+            context = await self.build_context(session_id, query, **request.extraInfo)
+            messages = context.get("messages", [{"role": "user", "content": query}])
+            tools = context.get("tools", [])
 
             # 使用工具运行（虽然没有工具）
             from src.agent.abs_agent import run_llm_with_tools
@@ -192,7 +196,7 @@ class MemoryOnlyAgent(MemoryAwareAgent):
             async for event in run_llm_with_tools(
                     self.backbone_llm_client,
                     messages,
-                    []  # 空工具列表
+                    tools  # 使用上下文中的工具列表
             ):
                 if event["event"] == "final_content":
                     result = event["content"]
@@ -271,35 +275,33 @@ class CombinedAgent(ToolUsingAgent, MemoryAwareAgent):
         # 上下文构建器（如果有必要的服务）
         tool_manager = getattr(self, "tool_manager", None)
         memory_service = getattr(self, "memory_service", None)
+        prompt_service = getattr(self, "prompt_service", None)
 
-        if tool_manager and memory_service:
-            try:
-                from src.context.context_maker import DefaultContextMaker
-                from src.context.augmenters.memory_augmenter import MemoryAugmenter
-                from src.context.augmenters.tool_augmenter import ToolAugmenter
+        try:
+            from src.context.context_maker import DefaultContextMaker
 
-                context_maker = DefaultContextMaker()
-                context_maker.add_augmenter(MemoryAugmenter(memory_service))
-                context_maker.add_augmenter(ToolAugmenter(tool_manager))
-                self.set_context_maker(context_maker)
-                print("✅ 上下文构建器初始化完成")
-            except ImportError:
-                print("⚠️ 上下文构建器未初始化")
-        else:
-            print("⚠️ 上下文构建器初始化失败：缺少必要服务")
+            # 创建ContextMaker实例并传入服务
+            context_maker = DefaultContextMaker(
+                memory_service=memory_service,
+                tool_manager=tool_manager,
+                prompt_service=prompt_service
+            )
+            
+            self.set_context_maker(context_maker)
+            print("✅ 上下文构建器初始化完成")
+        except ImportError:
+            print("⚠️ 上下文构建器未初始化")
 
     async def process(self, request: AgentRequest) -> AgentResponse:
         """处理用户请求"""
         try:
             query = request.query
+            session_id = request.session_id
 
-            # 获取工具列表
-            tools = []
-            if self.tool_manager:
-                tools = await self.tool_manager.get_tools()
-
-            # 构建消息
-            messages = [{"role": "user", "content": query}]
+            # 使用ContextMaker构建上下文
+            context = await self.build_context(session_id, query, **request.extraInfo)
+            messages = context.get("messages", [{"role": "user", "content": query}])
+            tools = context.get("tools", [])
 
             # 使用工具运行
             result = await self.run_with_tools(messages, tools)
@@ -338,4 +340,3 @@ class CombinedAgent(ToolUsingAgent, MemoryAwareAgent):
             "description": "同时使用工具和记忆的 Agent",
             "capabilities": ["tool_usage", "memory"]
         }
-

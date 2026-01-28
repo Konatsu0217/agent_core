@@ -1,3 +1,4 @@
+import asyncio
 from abc import ABC, abstractmethod
 from typing import List, Dict, Any, Optional
 
@@ -19,9 +20,11 @@ class IContextMaker(ABC):
 class DefaultContextMaker(IContextMaker):
     """默认上下文构建器"""
     
-    def __init__(self, memory_service=None, tool_manager=None):
+    def __init__(self, memory_service=None, tool_manager=None, prompt_service=None, session_service=None):
         self.memory_service = memory_service
         self.tool_manager = tool_manager
+        self.prompt_service = prompt_service
+        self.session_service = session_service
         self.augmenters = []
     
     def add_augmenter(self, augmenter):
@@ -39,11 +42,114 @@ class DefaultContextMaker(IContextMaker):
             "session": None
         }
         
+        # 构建prompt和tools
+        await self._build_prompt_and_tools(context, **kwargs)
+        
         # 增强上下文
         for augmenter in self.augmenters:
             context = await augmenter.augment(context, **kwargs)
         
         return context
+    
+    async def _build_prompt_and_tools(self, context: Dict[str, Any], **kwargs):
+        """构建prompt和tools"""
+        session_id = context.get("session_id", "")
+        user_query = context.get("user_query", "")
+        
+        # 统一创建 Task 对象
+        tasks = []
+
+        # 构建提示词
+        if self.prompt_service:
+            pe_task = asyncio.create_task(self.prompt_service.build_prompt(
+                session_id=session_id,
+                user_query=user_query
+            ))
+            tasks.append(pe_task)
+        else:
+            async def empty_pe_task():
+                return {"llm_request": {"messages": [{"role": "user", "content": user_query}]}}
+            tasks.append(empty_pe_task())
+
+        # 搜索记忆
+        if self.memory_service:
+            rag_task = asyncio.create_task(self.memory_service.search(
+                query=user_query,
+                user_id=session_id,
+                limit=5
+            ))
+            tasks.append(rag_task)
+        else:
+            async def empty_rag_task():
+                return []
+            tasks.append(empty_rag_task())
+
+        # 获取工具
+        if self.tool_manager:
+            tools_task = asyncio.create_task(self.tool_manager.get_tools())
+            tasks.append(tools_task)
+        else:
+            async def empty_tools_task():
+                return []
+            tasks.append(empty_tools_task())
+
+        # 获取会话
+        if self.session_service:
+            session_task = asyncio.create_task(self.session_service.get_session(
+                session_id, "DefaultAgent"
+            ))
+            tasks.append(session_task)
+        else:
+            async def empty_session_task():
+                return None
+            tasks.append(empty_session_task())
+
+        # 并行执行
+        try:
+            results = await asyncio.wait_for(
+                asyncio.gather(*tasks, return_exceptions=True),
+                timeout=5
+            )
+
+            llm_request_response, rag_results, tools, session_history = results
+
+            # 处理异常
+            if isinstance(llm_request_response, Exception):
+                print(f"❌ PE build_prompt failed: {llm_request_response}")
+                return
+
+            if isinstance(tools, Exception):
+                print(f"⚠️ ToolManager get_tools failed: {tools}")
+                tools = []
+
+            if isinstance(rag_results, Exception):
+                print(f"⚠️ MemoryService search failed: {rag_results}")
+                rag_results = []
+
+            # 正确提取数据
+            llm_request = llm_request_response.get("llm_request", {})
+            messages = llm_request.get("messages", [])
+
+            if session_history:
+                session_messages = session_history.get("messages", [])
+                messages = messages[:-1] + session_messages + messages[-1:]
+
+            if rag_results:
+                if messages:
+                    messages[0]["content"] += f"\n\n[Relevant Memory]: {rag_results} \n\n"
+
+
+
+            # 更新上下文
+            context["messages"] = messages
+            context["tools"] = tools
+            context["memory"] = rag_results
+            context["session"] = session_history
+
+        except asyncio.TimeoutError:
+            print("❌ Timeout: Service request took too long")
+        except Exception as e:
+            print(f"❌ Unexpected error: {e}")
     
     async def augment_context(self, context: Dict[str, Any], **kwargs) -> Dict[str, Any]:
         """增强上下文"""

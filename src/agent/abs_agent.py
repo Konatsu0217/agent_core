@@ -178,7 +178,13 @@ class BaseAgent(IBaseAgent, ServiceAwareAgent):
         self.context_maker = None
 
     def set_context_maker(self, context_maker):
-        """设置上下文构建器"""
+        """设置上下文构建器并注入服务"""
+        # 注入服务
+        context_maker.memory_service = getattr(self, "memory_service", None)
+        context_maker.tool_manager = getattr(self, "tool_manager", None)
+        context_maker.prompt_service = getattr(self, "prompt_service", None)
+        context_maker.session_service = getattr(self, "session_service", None)
+        # 设置上下文构建器
         self.context_maker = context_maker
 
     async def initialize(self):
@@ -189,6 +195,21 @@ class BaseAgent(IBaseAgent, ServiceAwareAgent):
         """处理用户请求"""
         # 子类需要实现此方法
         return None
+
+    async def build_context(self, session_id: str, user_query: str, **kwargs) -> Dict[str, Any]:
+        """使用ContextMaker构建上下文"""
+        if self.context_maker:
+            return await self.context_maker.build_context(session_id, user_query, **kwargs)
+        else:
+            # 如果没有ContextMaker，返回默认上下文
+            return {
+                "session_id": session_id,
+                "user_query": user_query,
+                "messages": [{"role": "user", "content": user_query}],
+                "tools": [],
+                "memory": [],
+                "session": None
+            }
 
     def get_capabilities(self) -> dict:
         """返回 Agent 能力描述"""
