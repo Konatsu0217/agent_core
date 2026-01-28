@@ -27,26 +27,19 @@ class AgentFactory:
             根据配置创建的 Agent 实例
         """
         # 从 AgentProfile 中提取配置
-        name = agent_profile.get("name", "default_agent")
-        use_tools = agent_profile.get("tools_use", False)
-        use_memory = agent_profile.get("memory", False)
+        agent_type = agent_profile.get("agent_type", "BasicAgent")
+
+        # 使用工厂映射而不是硬编码
+        agent_constructors = {
+            "basic": BasicAgent,
+            "tool_only": ToolOnlyAgent,
+            "memory_only": MemoryOnlyAgent,
+            "combined": CombinedAgent,
+        }
+
+        constructor = agent_constructors.get(agent_type, BasicAgent)
         work_flow_type = ExecutionMode(agent_profile.get("work_flow_type", "test"))
-        output_format = agent_profile.get("output_format", "json")
-        services_needed = agent_profile.get("services_needed", [])
-        
-        # 根据配置选择要创建的 Agent 类
-        if use_tools and use_memory:
-            # 同时使用工具和记忆
-            return CombinedAgent(agent_profile, work_flow_type)
-        elif use_tools:
-            # 只使用工具
-            return ToolOnlyAgent(agent_profile, work_flow_type)
-        elif use_memory:
-            # 只使用记忆
-            return MemoryOnlyAgent(agent_profile, work_flow_type)
-        else:
-            # 基础 Agent
-            return BasicAgent(agent_profile, work_flow_type)
+        return constructor(agent_profile, work_flow_type)
 
     @staticmethod
     async def get_basic_agent() -> IBaseAgent:

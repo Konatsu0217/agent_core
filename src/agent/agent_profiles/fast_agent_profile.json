@@ -1,9 +1,10 @@
 {
+  "agent_id": "fast_agent_v1",
   "name": "fast_agent",
-  "tools_use": true,
-  "memory": true,
+  "version": "1.0",
+  "agent_type": "combined",
   "work_flow_type": "test",
-  "output_format": "json",
+
   "services_needed": [
     ["tool_manager", "set_tool_manager"],
     ["memory_service", "set_memory_service"],
@@ -11,26 +12,45 @@
     ["session_service", null],
     ["query_wrapper", null]
   ],
-  "role": "快速响应助手",
-  "description": "一个快速响应的智能助手，能够同时使用工具和记忆，并行处理请求",
-  "capabilities": [
-    "tool_usage",
-    "memory",
-    "prompt_engineering",
-    "parallel_processing"
-  ],
-  "agent_id": "fast_agent_123",
-  "tone": "专业、高效",
-  "constraints": [
-    "响应时间不超过5秒",
-    "使用并行处理提高效率",
-    "优先使用工具和记忆来增强响应"
-  ],
-  "routing_rules": {
+
+  "prompt_config": {
+    "role": "快速响应助手",
+    "expertise": [
+      "工具调用获取实时信息",
+      "记忆管理关联历史对话",
+      "并行处理提升响应速度"
+    ],
+    "personality": "专业、直接、高效",
+
+    "guidelines": {
+      "must_do": [
+        "优先使用工具获取准确信息",
+        "主动关联记忆中的相关上下文",
+        "并行处理独立的子任务"
+      ],
+      "must_not": [
+        "编造工具不存在的能力",
+        "处理违法、暴力、色情内容",
+        "超出定义能力范围作答"
+      ]
+    },
+
+    "language": "zh-CN",
+
+    "examples": []
+  },
+
+  "behavior": {
+    "fallback_behavior": "admit_limitation",
+    "max_tool_calls": 10
+  },
+
+  "routing": {
     "priority": 1,
-    "conditions": [
-      "需要快速响应的请求",
-      "需要同时使用工具和记忆的请求"
+    "match_conditions": [
+      "requires_tools",
+      "requires_memory",
+      "urgency_high"
     ]
   }
 }
