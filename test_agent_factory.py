@@ -22,9 +22,6 @@ async def test_agent_factory():
     container.register("memory_service", Mem0MemoryService())
     container.register("prompt_service", PePromptService())
     container.register("session_service", DefaultSessionService())
-    # ("prompt_service", None),
-    # ("session_service", None),
-    # ("query_wrapper", None)
     print("✅ 所有服务注册完成")
     
     print("=== 测试 1: 创建基础Fast Agent===")
