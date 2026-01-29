@@ -1,20 +1,55 @@
 import asyncio
 from abc import ABC, abstractmethod
+from pyexpat.errors import messages
 from typing import List, Dict, Any, Optional
+
+from src.context.context_model import Context
 
 
 class IContextMaker(ABC):
     """上下文构建接口"""
     
     @abstractmethod
-    async def build_context(self, session_id: str, user_query: str, **kwargs) -> Dict[str, Any]:
+    async def build_context(self, session_id: str, user_query: str, **kwargs) -> Context:
         """构建上下文"""
         pass
     
     @abstractmethod
-    async def augment_context(self, context: Dict[str, Any], **kwargs) -> Dict[str, Any]:
+    async def augment_context(self, context: Context, **kwargs) -> Context:
         """增强上下文"""
         pass
+
+    @staticmethod
+    def build_custom_message_struct(*components, **kwargs) -> List[Dict[str, Any]]:
+        """按传入顺序构建自定义上下文
+        
+        Args:
+            *components: 要拼接的组件，可以是字符串或字典
+            **kwargs: 额外参数
+            
+        Returns:
+            拼接后的消息列表
+        """
+        """按传入顺序构建自定义上下文"""
+        messages = []
+
+        for component in components:
+            if isinstance(component, str) and component:
+                # 如果是字符串且非空，作为系统提示词
+                messages.append({"role": "system", "content": component})
+            elif isinstance(component, dict) and component:
+                # 如果是字典且非空，直接添加
+                messages.append(component)
+            elif isinstance(component, list):
+                # 如果是列表，递归处理
+                for item in component:
+                    if item:
+                        if isinstance(item, dict):
+                            messages.append(item)
+                        elif isinstance(item, str):
+                            messages.append({"role": "system", "content": item})
+
+        return messages
 
 
 class DefaultContextMaker(IContextMaker):
@@ -25,22 +60,24 @@ class DefaultContextMaker(IContextMaker):
         self.tool_manager = tool_manager
         self.prompt_service = prompt_service
         self.session_service = session_service
+        self.agent_profile = None
         self.augmenters = []
     
     def add_augmenter(self, augmenter):
         """添加上下文增强器"""
         self.augmenters.append(augmenter)
     
-    async def build_context(self, session_id: str, user_query: str, **kwargs) -> Dict[str, Any]:
+    async def build_context(self, session_id: str, user_query: str, **kwargs) -> Context:
         """构建上下文"""
-        context = {
-            "session_id": session_id,
-            "user_query": user_query,
-            "messages": [],
-            "tools": [],
-            "memory": [],
-            "session": None
-        }
+        context = Context(
+            session_id=session_id,
+            user_query=user_query,
+            messages=[],
+            tools=[],
+            memory=[],
+            session=None,
+            **kwargs
+        )
         
         # 构建prompt和tools
         await self._build_prompt_and_tools(context, **kwargs)
@@ -51,19 +88,19 @@ class DefaultContextMaker(IContextMaker):
         
         return context
     
-    async def _build_prompt_and_tools(self, context: Dict[str, Any], **kwargs):
+    async def _build_prompt_and_tools(self, context: Context, **kwargs):
         """构建prompt和tools"""
-        session_id = context.get("session_id", "")
-        user_query = context.get("user_query", "")
+        session_id = context.session_id
+        user_query = context.user_query
         
         # 统一创建 Task 对象
         tasks = []
 
         # 构建提示词
-        if self.prompt_service:
+        if self.prompt_service and self.agent_profile:
             pe_task = asyncio.create_task(self.prompt_service.build_prompt(
                 session_id=session_id,
-                user_query=user_query
+                agent_profile=self.agent_profile
             ))
             tasks.append(pe_task)
         else:
@@ -111,11 +148,11 @@ class DefaultContextMaker(IContextMaker):
                 timeout=5
             )
 
-            llm_request_response, rag_results, tools, session_history = results
+            system_prompt, rag_results, tools, session_history = results
 
             # 处理异常
-            if isinstance(llm_request_response, Exception):
-                print(f"❌ PE build_prompt failed: {llm_request_response}")
+            if isinstance(system_prompt, Exception):
+                print(f"❌ PE build_prompt failed: {system_prompt}")
                 return
 
             if isinstance(tools, Exception):
@@ -126,32 +163,24 @@ class DefaultContextMaker(IContextMaker):
                 print(f"⚠️ MemoryService search failed: {rag_results}")
                 rag_results = []
 
-            # 正确提取数据
-            llm_request = llm_request_response.get("llm_request", {})
-            messages = llm_request.get("messages", [])
+            # 分离系统提示词和消息
 
-            if session_history:
-                session_messages = session_history.get("messages", [])
-                messages = messages[:-1] + session_messages + messages[-1:]
-
-            if rag_results:
-                if messages:
-                    messages[0]["content"] += f"\n\n[Relevant Memory]: {rag_results} \n\n"
-
-
+            # 移除末尾多余的换行
+            system_prompt = system_prompt.strip()
 
             # 更新上下文
-            context["messages"] = messages
-            context["tools"] = tools
-            context["memory"] = rag_results
-            context["session"] = session_history
+            context.system_prompt = system_prompt
+            context.messages = [{"role": "user", "content": {user_query}}]
+            context.tools = tools
+            context.memory = rag_results
+            context.session = session_history
 
         except asyncio.TimeoutError:
             print("❌ Timeout: Service request took too long")
         except Exception as e:
             print(f"❌ Unexpected error: {e}")
     
-    async def augment_context(self, context: Dict[str, Any], **kwargs) -> Dict[str, Any]:
+    async def augment_context(self, context: Context, **kwargs) -> Context:
         """增强上下文"""
         for augmenter in self.augmenters:
             context = await augmenter.augment(context, **kwargs)

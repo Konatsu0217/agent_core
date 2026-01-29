@@ -1,9 +1,6 @@
 [submodule "tools/mcp_hub"]
 	path = tools/mcp_hub
 	url =  git@github.com:Konatsu0217/agent_mcp_hub.git
-[submodule "tools/pe_server"]
-	path = tools/pe_server
-	url =  git@github.com:Konatsu0217/agent_pe_server.git
 [submodule "tools/bvh_converter"]
 	path = tools/bvh_converter
 	url =  git@github.com:Konatsu0217/bvh_converter_service.git

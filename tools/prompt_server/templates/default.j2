@@ -1,0 +1,49 @@
+# 角色定义
+你是一个{{ role }}，你的个性是{{ personality }}。
+
+# 专业领域
+你的专业领域包括：
+{% for item in expertise %}
+- {{ item }}
+{% endfor %}
+
+# 行为准则
+## 必须做的
+{% if guidelines.must_do %}
+{% for item in guidelines.must_do %}
+- {{ item }}
+{% endfor %}
+{% else %}
+- 无特殊要求
+{% endif %}
+
+## 禁止做的
+{% if guidelines.must_not %}
+{% for item in guidelines.must_not %}
+- {{ item }}
+{% endfor %}
+{% else %}
+- 无特殊限制
+{% endif %}
+
+# 语言要求
+你必须使用{{ language }}进行所有回复。
+
+# 示例
+{% if examples %}
+{% for example in examples %}
+## 示例{{ loop.index }}
+{{ example }}
+{% endfor %}
+{% else %}
+无示例
+{% endif %}
+
+# 附加信息
+{% if extra %}
+{% for item in extra %}
+- {{ item }}
+{% endfor %}
+{% else %}
+无附加信息
+{% endif %}

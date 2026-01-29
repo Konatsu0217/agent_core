@@ -1,8 +1,9 @@
 import json
 from abc import ABC, abstractmethod
 from enum import Enum
-from typing import Any, Dict
+from typing import Any, Dict, List
 
+from src.context.context_maker import IContextMaker
 from src.domain.models.agent_data_models import AgentRequest, AgentResponse
 from src.infrastructure.clients.llm_clients.llm_client_manager import static_llmClientManager
 
@@ -98,7 +99,7 @@ class ExecutionMode(Enum):
 
 class IBaseAgent(ABC):
     """所有 Agent 的统一接口"""
-    def __init__(self, name: str, work_flow_type: ExecutionMode, use_tools: bool = True, output_format: str = "json"):
+    def __init__(self, agent_profile:Dict[str, Any], name: str, work_flow_type: ExecutionMode, use_tools: bool = True, output_format: str = "json"):
         # Agent 名称
         self.name = name
         # 工作模式：one-shot / ReAct / Plan-and-Solve
@@ -107,6 +108,8 @@ class IBaseAgent(ABC):
         self.use_tools = use_tools
         # 是否格式化输出，如果有格式化输出自己处理格式解析
         self.output_format = output_format
+        # 全局的agent描述
+        self.agent_profile = agent_profile
 
     @abstractmethod
     async def initialize(self):
@@ -166,12 +169,16 @@ class ServiceAwareAgent:
             print("⚠️ 服务容器未初始化")
 
 
+async def assemble_messages(*components, **kwargs) -> List[Dict[str, Any]]:
+    return IContextMaker.build_custom_message_struct(*components, **kwargs)
+
+
 class BaseAgent(IBaseAgent, ServiceAwareAgent):
     """基础 Agent 实现"""
 
-    def __init__(self, name: str, work_flow_type: ExecutionMode, use_tools: bool = True, output_format: str = "json"):
+    def __init__(self,agent_profile:Dict[str, Any], name: str, work_flow_type: ExecutionMode, use_tools: bool = True, output_format: str = "json"):
         # 初始化所有父类
-        IBaseAgent.__init__(self, name=name, work_flow_type=work_flow_type, use_tools=use_tools, output_format=output_format)
+        IBaseAgent.__init__(self,agent_profile=agent_profile, name=name, work_flow_type=work_flow_type, use_tools=use_tools, output_format=output_format)
         ServiceAwareAgent.__init__(self)
         
         self.backbone_llm_client = static_llmClientManager.get_client()
@@ -186,6 +193,7 @@ class BaseAgent(IBaseAgent, ServiceAwareAgent):
         context_maker.session_service = getattr(self, "session_service", None)
         # 设置上下文构建器
         self.context_maker = context_maker
+        self.context_maker.agent_profile = self.agent_profile
 
     async def initialize(self):
         """初始化 Agent"""
@@ -196,20 +204,22 @@ class BaseAgent(IBaseAgent, ServiceAwareAgent):
         # 子类需要实现此方法
         return None
 
-    async def build_context(self, session_id: str, user_query: str, **kwargs) -> Dict[str, Any]:
+    async def build_context(self, session_id: str, user_query: str, **kwargs):
         """使用ContextMaker构建上下文"""
         if self.context_maker:
             return await self.context_maker.build_context(session_id, user_query, **kwargs)
         else:
-            # 如果没有ContextMaker，返回默认上下文
-            return {
-                "session_id": session_id,
-                "user_query": user_query,
-                "messages": [{"role": "user", "content": user_query}],
-                "tools": [],
-                "memory": [],
-                "session": None
-            }
+            # 如果没有ContextMaker，返回默认Context对象
+            from src.context.context_model import Context
+            return Context(
+                session_id=session_id,
+                user_query=user_query,
+                messages=[{"role": "user", "content": user_query}],
+                tools=[],
+                memory=[],
+                session=None,
+                **kwargs
+            )
 
     def get_capabilities(self) -> dict:
         """返回 Agent 能力描述"""
@@ -229,8 +239,8 @@ class BaseAgent(IBaseAgent, ServiceAwareAgent):
 class ToolUsingAgent(BaseAgent):
     """支持工具使用的 Agent"""
 
-    def __init__(self, name: str, work_flow_type: ExecutionMode, use_tools: bool = True, output_format: str = "json"):
-        super().__init__(name=name, work_flow_type=work_flow_type, use_tools=use_tools, output_format=output_format)
+    def __init__(self, agent_profile:Dict[str, Any], name: str, work_flow_type: ExecutionMode, use_tools: bool = True, output_format: str = "json"):
+        super().__init__(agent_profile=agent_profile, name=name, work_flow_type=work_flow_type, use_tools=use_tools, output_format=output_format)
         self.tool_manager = None
 
     def set_tool_manager(self, tool_manager):
@@ -322,8 +332,8 @@ class ToolUsingAgent(BaseAgent):
 class MemoryAwareAgent(BaseAgent):
     """支持记忆管理的 Agent"""
 
-    def __init__(self, name: str, work_flow_type: ExecutionMode, use_tools: bool = True, output_format: str = "json"):
-        super().__init__(name=name, work_flow_type=work_flow_type, use_tools=use_tools, output_format=output_format)
+    def __init__(self,agent_profile:Dict[str, Any], name: str, work_flow_type: ExecutionMode, use_tools: bool = True, output_format: str = "json"):
+        super().__init__(agent_profile= agent_profile, name=name, work_flow_type=work_flow_type, use_tools=use_tools, output_format=output_format)
         self.memory_service = None
         self.response_cache: Dict[str, str] = {}
 

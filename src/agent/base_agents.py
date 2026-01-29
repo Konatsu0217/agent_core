@@ -3,7 +3,7 @@ import json
 from typing import Any, Dict
 
 from src.agent.abs_agent import ExecutionMode, BaseAgent, ToolUsingAgent, \
-    MemoryAwareAgent
+    MemoryAwareAgent, assemble_messages
 from src.domain.models import AgentRequest, AgentResponse
 
 
@@ -43,8 +43,13 @@ class BasicAgent(BaseAgent):
 
             # 使用ContextMaker构建上下文
             context = await self.build_context(session_id, query, **request.extraInfo)
-            messages = context.get("messages", [{"role": "user", "content": query}])
-            tools = context.get("tools", [])
+            
+            # 按顺序组合消息：system_prompt -> messages
+            messages = await assemble_messages([context.system_prompt, context.session, context.messages])
+            if not messages:
+                messages = [{"role": "user", "content": query}]
+            
+            tools = context.tools or []
 
             # 使用工具运行（虽然没有工具）
             from src.agent.abs_agent import run_llm_with_tools
@@ -120,8 +125,13 @@ class ToolOnlyAgent(ToolUsingAgent):
 
             # 使用ContextMaker构建上下文
             context = await self.build_context(session_id, query, **request.extraInfo)
-            messages = context.get("messages", [{"role": "user", "content": query}])
-            tools = context.get("tools", [])
+            
+            # 按顺序组合消息：system_prompt -> messages
+            messages = await assemble_messages(([context.system_prompt, context.messages]))
+            if not messages:
+                messages = [{"role": "user", "content": query}]
+            
+            tools = context.tools or []
 
             # 使用工具运行
             result = await self.run_with_tools(messages, tools)
@@ -186,8 +196,13 @@ class MemoryOnlyAgent(MemoryAwareAgent):
 
             # 使用ContextMaker构建上下文
             context = await self.build_context(session_id, query, **request.extraInfo)
-            messages = context.get("messages", [{"role": "user", "content": query}])
-            tools = context.get("tools", [])
+            
+            # 按顺序组合消息：system_prompt -> messages
+            messages = await assemble_messages(([context.system_prompt, context.messages]))
+            if not messages:
+                messages = [{"role": "user", "content": query}]
+            
+            tools = context.tools or []
 
             # 使用工具运行（虽然没有工具）
             from src.agent.abs_agent import run_llm_with_tools
@@ -248,9 +263,9 @@ class CombinedAgent(ToolUsingAgent, MemoryAwareAgent):
         output_format = agent_profile.get("output_format", "json")
 
         # 初始化父类
-        ToolUsingAgent.__init__(self, name=name, work_flow_type=work_flow_type, use_tools=use_tools,
+        ToolUsingAgent.__init__(self, agent_profile=agent_profile, name=name, work_flow_type=work_flow_type, use_tools=use_tools,
                                 output_format=output_format)
-        MemoryAwareAgent.__init__(self, name=name, work_flow_type=work_flow_type, use_tools=use_tools,
+        MemoryAwareAgent.__init__(self, agent_profile=agent_profile, name=name, work_flow_type=work_flow_type, use_tools=use_tools,
                                   output_format=output_format)
 
         # 角色设定提示词字段（占位）
@@ -300,8 +315,15 @@ class CombinedAgent(ToolUsingAgent, MemoryAwareAgent):
 
             # 使用ContextMaker构建上下文
             context = await self.build_context(session_id, query, **request.extraInfo)
-            messages = context.get("messages", [{"role": "user", "content": query}])
-            tools = context.get("tools", [])
+            
+            # 按顺序组合消息：system_prompt -> messages
+            messages = await assemble_messages(([context.system_prompt, context.messages]))
+            if not messages:
+                messages = [{"role": "user", "content": query}]
+            
+            tools = context.tools or []
+
+            print(messages)
 
             # 使用工具运行
             result = await self.run_with_tools(messages, tools)
