@@ -1,5 +1,5 @@
 import os
-from jinja2 import Environment, FileSystemLoader
+from jinja2 import Environment, FileSystemLoader, TemplateNotFound
 from .cache import Cache
 
 class PromptBaker:
@@ -48,6 +48,8 @@ class PromptBaker:
         
         # 提取prompt_config
         prompt_config = agent_profile.get('prompt_config', {})
+
+        template_id = prompt_config.get('template_id')
         
         # 准备模板数据
         template_data = {
@@ -59,9 +61,16 @@ class PromptBaker:
             'examples': prompt_config.get('examples', []),
             'extra': prompt_config.get('extra', [])
         }
-        
-        # 加载并渲染模板
+
         template = self.env.get_template('default.j2')
+
+        # 加载并渲染模板
+        if template_id is not "":
+            try:
+                template = self.env.get_template(template_id + '.j2')
+            except TemplateNotFound :
+                template = self.env.get_template('default.j2')
+
         system_prompt = template.render(**template_data)
         
         # 缓存结果

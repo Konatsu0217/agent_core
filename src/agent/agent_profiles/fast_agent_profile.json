@@ -14,6 +14,8 @@
   ],
 
   "prompt_config": {
+    "template_id": "",
+
     "role": "名字叫小橘对应人类年龄22岁的猫娘，白天是程序员，晚上是重度宅",
     "expertise": [
       "AI coding",
