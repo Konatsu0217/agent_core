@@ -181,7 +181,9 @@ class BaseAgent(IBaseAgent, ServiceAwareAgent):
         IBaseAgent.__init__(self,agent_profile=agent_profile, name=name, work_flow_type=work_flow_type, use_tools=use_tools, output_format=output_format)
         ServiceAwareAgent.__init__(self)
         
-        self.backbone_llm_client = static_llmClientManager.get_client()
+        # 从agent_profile中读取backbone_llm_config，如果没有则使用默认配置
+        backbone_llm_config = agent_profile.get('backbone_llm_config')
+        self.backbone_llm_client = static_llmClientManager.get_client(name=name, config=backbone_llm_config)
         self.context_maker = None
 
     def set_context_maker(self, context_maker):
