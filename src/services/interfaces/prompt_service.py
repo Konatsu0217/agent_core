@@ -11,6 +11,6 @@ class IPromptService(ABC):
         pass
     
     @abstractmethod
-    async def build_prompt(self, session_id: str, user_query: str, **kwargs) -> Dict[str, Any]:
+    async def build_prompt(self, session_id: str, agent_profile:Dict[str,Any], **kwargs) -> Dict[str, Any]:
         """构建提示词"""
         pass

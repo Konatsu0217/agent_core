@@ -1,8 +1,11 @@
 import json
 from abc import ABC, abstractmethod
 from enum import Enum
+from typing import Any, Dict, List
 
+from src.context.context_maker import IContextMaker
 from src.domain.models.agent_data_models import AgentRequest, AgentResponse
+from src.infrastructure.clients.llm_clients.llm_client_manager import static_llmClientManager
 
 
 async def run_llm_with_tools(llm_client, messages, tools):
@@ -96,7 +99,7 @@ class ExecutionMode(Enum):
 
 class IBaseAgent(ABC):
     """所有 Agent 的统一接口"""
-    def __init__(self, name: str, work_flow_type: ExecutionMode, use_tools: bool = True, output_format: str = "json"):
+    def __init__(self, agent_profile:Dict[str, Any], name: str, work_flow_type: ExecutionMode, use_tools: bool = True, output_format: str = "json"):
         # Agent 名称
         self.name = name
         # 工作模式：one-shot / ReAct / Plan-and-Solve
@@ -105,9 +108,11 @@ class IBaseAgent(ABC):
         self.use_tools = use_tools
         # 是否格式化输出，如果有格式化输出自己处理格式解析
         self.output_format = output_format
+        # 全局的agent描述
+        self.agent_profile = agent_profile
 
     @abstractmethod
-    def initialize(self):
+    async def initialize(self):
         """初始化 Agent"""
         pass
 
@@ -125,3 +130,228 @@ class IBaseAgent(ABC):
     def estimate_cost(self, request: AgentRequest) -> dict:
         """估算处理该请求的成本（时间/Token）"""
         pass
+
+
+class ServiceAwareAgent:
+    """包含服务初始化逻辑的基类"""
+
+    def __init__(self):
+        """初始化服务感知Agent"""
+        # 服务需求列表
+        self.services_needed = []
+
+    def _initialize_services(self, services_needed):
+        """初始化服务"""
+        # 保存服务需求
+        self.services_needed = services_needed
+        
+        try:
+            from src.di.container import get_service_container
+
+            # 获取服务容器
+            container = get_service_container()
+
+            # 从容器中获取服务
+            for service_name, setter_method in services_needed:
+                service = container.get(service_name)
+                if service:
+                    if setter_method:
+                        # 如果有setter方法，调用它设置服务
+                        if hasattr(self, setter_method):
+                            getattr(self, setter_method)(service)
+                    else:
+                        # 如果没有setter方法，直接设置为属性
+                        setattr(self, service_name, service)
+                    print(f"✅ 从容器获取 {service_name}")
+                else:
+                    print(f"⚠️ {service_name} 未注册")
+        except ImportError:
+            print("⚠️ 服务容器未初始化")
+
+
+async def assemble_messages(*components, **kwargs) -> List[Dict[str, Any]]:
+    return IContextMaker.build_custom_message_struct(*components, **kwargs)
+
+
+class BaseAgent(IBaseAgent, ServiceAwareAgent):
+    """基础 Agent 实现"""
+
+    def __init__(self,agent_profile:Dict[str, Any], name: str, work_flow_type: ExecutionMode, use_tools: bool = True, output_format: str = "json"):
+        # 初始化所有父类
+        IBaseAgent.__init__(self,agent_profile=agent_profile, name=name, work_flow_type=work_flow_type, use_tools=use_tools, output_format=output_format)
+        ServiceAwareAgent.__init__(self)
+        
+        self.backbone_llm_client = static_llmClientManager.get_client()
+        self.context_maker = None
+
+    def set_context_maker(self, context_maker):
+        """设置上下文构建器并注入服务"""
+        # 注入服务
+        context_maker.memory_service = getattr(self, "memory_service", None)
+        context_maker.tool_manager = getattr(self, "tool_manager", None)
+        context_maker.prompt_service = getattr(self, "prompt_service", None)
+        context_maker.session_service = getattr(self, "session_service", None)
+        # 设置上下文构建器
+        self.context_maker = context_maker
+        self.context_maker.agent_profile = self.agent_profile
+
+    async def initialize(self):
+        """初始化 Agent"""
+        pass
+
+    async def process(self, request):
+        """处理用户请求"""
+        # 子类需要实现此方法
+        return None
+
+    async def build_context(self, session_id: str, user_query: str, **kwargs):
+        """使用ContextMaker构建上下文"""
+        if self.context_maker:
+            return await self.context_maker.build_context(session_id, user_query, **kwargs)
+        else:
+            # 如果没有ContextMaker，返回默认Context对象
+            from src.context.context_model import Context
+            return Context(
+                session_id=session_id,
+                user_query=user_query,
+                messages=[{"role": "user", "content": user_query}],
+                tools=[],
+                memory=[],
+                session=None,
+                **kwargs
+            )
+
+    def get_capabilities(self) -> dict:
+        """返回 Agent 能力描述"""
+        return {
+            "type": "base",
+            "description": "基础 Agent"
+        }
+
+    def estimate_cost(self, request) -> dict:
+        """估算成本"""
+        return {
+            "time": 99999,
+            "tokens": 99999
+        }
+
+
+class ToolUsingAgent(BaseAgent):
+    """支持工具使用的 Agent"""
+
+    def __init__(self, agent_profile:Dict[str, Any], name: str, work_flow_type: ExecutionMode, use_tools: bool = True, output_format: str = "json"):
+        super().__init__(agent_profile=agent_profile, name=name, work_flow_type=work_flow_type, use_tools=use_tools, output_format=output_format)
+        self.tool_manager = None
+
+    def set_tool_manager(self, tool_manager):
+        """设置工具管理器"""
+        self.tool_manager = tool_manager
+
+    async def run_with_tools(self, messages: list[dict[str, Any]], tools: list[dict[str, Any]]) -> str:
+        """使用工具运行"""
+        MAX_STEPS = 10  # 防死循环
+
+        for _ in range(MAX_STEPS):
+            # === 启动一轮 LLM 流式输出 ===
+            tool_call_found = False
+            final_answer = None
+
+            async for event in run_llm_with_tools(
+                    self.backbone_llm_client,
+                    messages,
+                    tools
+            ):
+                # ======== 工具调用 ========
+                if event["event"] == "tool_call":
+                    tool_call_found = True
+                    call = event["tool_call"]
+                    print(f"❕发现工具调用: {call}")
+
+                    # 1. 执行工具
+                    if self.tool_manager:
+                        result = await self.tool_manager.call_tool(call)
+                    else:
+                        result = {"success": False, "error": "No tool manager set"}
+
+                    # 2. 将工具结果加入 messages
+                    if result.get("success") is False:
+                        messages.append({
+                            "role": "user",
+                            "content": f"工具调用 {call['id']} 失败：{result.get('error', '')}"
+                        })
+                        continue
+
+                    msg = result.get("result", {}).get("data", "")
+                    await self.append_tool_call(messages, call, msg)
+                    # 注意：不要 break —— event 的流要读完
+                    continue
+
+                # ======== 最终输出 ========
+                elif event["event"] == "final_content":
+                    final_answer = event["content"]
+                    # 继续读流，但最终要退出大循环
+                    continue
+
+            # ========= 一轮流结束后 =========
+            if tool_call_found:
+                # 有工具调用 → 开启下一轮 LLM 运行
+                continue
+
+            # 没有工具调用 → 直接返回最终答案
+            return final_answer
+
+        # 超出最大循环
+        return "{\"error\": \"Exceeded max ReAct steps\"}"
+
+    @staticmethod
+    async def append_tool_call(messages, call, msg):
+        """添加工具调用结果到消息列表"""
+        # 先插入 tool 消息
+        messages.append({
+            "role": "tool",
+            "tool_call_id": call["id"],
+            "content": msg,
+        })
+        # 再插入 assistant(tool_call) 消息
+        messages.insert(-1, {
+            "role": "assistant",
+            "content": "",
+            "tool_calls": [
+                {
+                    "id": call["id"],
+                    "type": "function",
+                    "function": {
+                        "name": call["function"]["name"],
+                        "arguments": json.dumps(call["function"]["arguments"])
+                    }
+                }
+            ]
+        })
+
+
+class MemoryAwareAgent(BaseAgent):
+    """支持记忆管理的 Agent"""
+
+    def __init__(self,agent_profile:Dict[str, Any], name: str, work_flow_type: ExecutionMode, use_tools: bool = True, output_format: str = "json"):
+        super().__init__(agent_profile= agent_profile, name=name, work_flow_type=work_flow_type, use_tools=use_tools, output_format=output_format)
+        self.memory_service = None
+        self.response_cache: Dict[str, str] = {}
+
+    def set_memory_service(self, memory_service):
+        """设置记忆服务"""
+        self.memory_service = memory_service
+
+    async def add_memory(self, session_id: str) -> None:
+        """添加记忆"""
+        if not self.memory_service:
+            return
+
+        messages = [{
+            "role": "user",
+            "content": self.response_cache.get("query", "")
+        }, {
+            "role": "assistant",
+            "content": self.response_cache.get("response", "")
+        }]
+        self.response_cache.clear()
+        await self.memory_service.add(messages, session_id)
