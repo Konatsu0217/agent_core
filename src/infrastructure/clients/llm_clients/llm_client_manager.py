@@ -1,4 +1,4 @@
-import uuid
+import hashlib
 from typing import Dict
 
 import global_statics
@@ -15,13 +15,30 @@ class LLMClientManager:
     def __init__(self):
         self.clientMap: Dict[str, AbsLLMClient] = {}
         # client会有更多的属性，其实这里的一个client在我的计划里类似于一个agent
-        # 通过uuid来区分不同agent，有独立的context, pe, rag, tool等等，比如说 视觉模型 --> 视觉client，后续再说
+        # 通过配置的特征值来区分不同的客户端实例
+
+    def _generate_client_key(self, name: str=None, config=None) -> str:
+        """根据配置生成唯一的客户端密钥"""
+        # 使用配置的关键参数生成哈希值
+        config_str = f"{config.get('openapi_url', '')}_{config.get('model_name', '')}_{config.get('temperature', '')}_{config.get('max_tokens', '')}"
+        config_hash = hashlib.md5(config_str.encode()).hexdigest()
+        return f"{name or 'default'}_{config_hash}"
 
     def get_client(self, name: str=None, config=None) -> AbsLLMClient:
+        """
+        获取或创建LLM客户端实例
+        
+        Args:
+            name: 客户端名称，用于标识不同的客户端
+            config: LLM配置，如果为None则使用全局配置
+            
+        Returns:
+            LLM客户端实例
+        """
         if config is None:
             config = global_statics.backbone_llm_config
 
-        client_key = f"{name}_{config['model_name']}_{uuid.uuid1()}"
+        client_key = self._generate_client_key(name, config)
 
         provider = config.get("provider")
 

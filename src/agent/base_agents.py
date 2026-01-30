@@ -14,7 +14,7 @@ class BasicAgent(BaseAgent):
         name = agent_profile.get("name", "basic_agent")
         use_tools = agent_profile.get("tools_use", False)
         output_format = agent_profile.get("output_format", "json")
-        super().__init__(name=name, work_flow_type=work_flow_type, use_tools=use_tools, output_format=output_format)
+        super().__init__(agent_profile=agent_profile, name=name, work_flow_type=work_flow_type, use_tools=use_tools, output_format=output_format)
 
         # 角色设定提示词字段（占位）
         self.role_profile = {
@@ -100,7 +100,7 @@ class ToolOnlyAgent(ToolUsingAgent):
         name = agent_profile.get("name", "tool_only_agent")
         use_tools = agent_profile.get("tools_use", True)
         output_format = agent_profile.get("output_format", "json")
-        super().__init__(name=name, work_flow_type=work_flow_type, use_tools=use_tools, output_format=output_format)
+        super().__init__(agent_profile=agent_profile, name=name, work_flow_type=work_flow_type, use_tools=use_tools, output_format=output_format)
 
         # 角色设定提示词字段（占位）
         self.role_profile = {
@@ -171,7 +171,7 @@ class MemoryOnlyAgent(MemoryAwareAgent):
         name = agent_profile.get("name", "memory_only_agent")
         use_tools = agent_profile.get("tools_use", False)
         output_format = agent_profile.get("output_format", "json")
-        super().__init__(name=name, work_flow_type=work_flow_type, use_tools=use_tools, output_format=output_format)
+        super().__init__(agent_profile=agent_profile, name=name, work_flow_type=work_flow_type, use_tools=use_tools, output_format=output_format)
 
         # 角色设定提示词字段（占位）
         self.role_profile = {
