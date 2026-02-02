@@ -20,17 +20,16 @@ class IContextMaker(ABC):
         pass
 
     @staticmethod
-    def build_custom_message_struct(*components, **kwargs) -> List[Dict[str, Any]]:
+    def build_custom_message_struct(components: List[Any], **kwargs) -> List[Dict[str, Any]]:
         """按传入顺序构建自定义上下文
         
         Args:
-            *components: 要拼接的组件，可以是字符串或字典
+            components: 要拼接的组件列表
             **kwargs: 额外参数
             
         Returns:
             拼接后的消息列表
         """
-        """按传入顺序构建自定义上下文"""
         messages = []
 
         for component in components:
@@ -41,13 +40,8 @@ class IContextMaker(ABC):
                 # 如果是字典且非空，直接添加
                 messages.append(component)
             elif isinstance(component, list):
-                # 如果是列表，递归处理
-                for item in component:
-                    if item:
-                        if isinstance(item, dict):
-                            messages.append(item)
-                        elif isinstance(item, str):
-                            messages.append({"role": "system", "content": item})
+                # 如果是列表，直接添加整个列表
+                messages.extend(component)
 
         return messages
 
@@ -170,7 +164,7 @@ class DefaultContextMaker(IContextMaker):
 
             # 更新上下文
             context.system_prompt = system_prompt
-            context.messages = [{"role": "user", "content": {user_query}}]
+            context.messages = [{"role": "user", "content": user_query}]
             context.tools = tools
             context.memory = rag_results
             context.session = session_history

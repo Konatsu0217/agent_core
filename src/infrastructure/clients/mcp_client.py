@@ -87,21 +87,44 @@ class MCPHubClient:
     # -----------------------
     async def call_tool(
         self,
-        id: str,
-        type: str,
-        function: Dict[str, Any],
+        tool: str,
+        arguments: Dict[str, Any],
         timeout: Optional[float] = None,
     ) -> Dict[str, Any]:
         """
         Synchronous-style tool call (POST /hub/call).
         Returns parsed JSON (dict) from the hub.
         """
-        payload = {"id": id, "type": type, "function": function}
-        json_body = {"json": payload}
+        # Create payload in MCPToolCallRequest format
+        payload = {
+            "id": f"call_{hash(str(tool) + str(arguments))}",
+            "type": "function",
+            "function": {
+                "name": tool,
+                "arguments": arguments
+            }
+        }
         # allow override timeout per-call
         if timeout:
-            json_body["timeout"] = timeout
+            payload["timeout"] = timeout
         return await self._request_json("POST", "/mcp_hub/call", json=payload)
+    
+    async def approve_tool(
+        self,
+        tool: str,
+        arguments: Dict[str, Any],
+        approval_id: str,
+        timeout: Optional[float] = None,
+    ) -> Dict[str, Any]:
+        """
+        Approve tool execution (POST /hub/approve).
+        Returns parsed JSON (dict) from the hub.
+        """
+        payload = {"tool": tool, "arguments": arguments, "approval_id": approval_id}
+        # allow override timeout per-call
+        if timeout:
+            payload["timeout"] = timeout
+        return await self._request_json("POST", "/mcp_hub/approve", json=payload)
 
     # -----------------------
     # tool call (stream)
@@ -119,7 +142,15 @@ class MCPHubClient:
         This function does NOT interpret chunks — it forwards them raw.
         """
         url = f"{self.base_url}/mcp_hub/call_stream"
-        payload = {"tool": tool, "arguments": arguments}
+        # Create payload in MCPToolCallRequest format
+        payload = {
+            "id": f"call_{hash(str(tool) + str(arguments))}",
+            "type": "function",
+            "function": {
+                "name": tool,
+                "arguments": arguments
+            }
+        }
         # use a fresh client request so we can iterate response stream
         async with httpx.AsyncClient(timeout=self._client.timeout) as client:
             try:

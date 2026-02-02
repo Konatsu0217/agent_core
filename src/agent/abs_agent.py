@@ -275,16 +275,47 @@ class ToolUsingAgent(BaseAgent):
                     else:
                         result = {"success": False, "error": "No tool manager set"}
 
-                    # 2. 将工具结果加入 messages
+                    # 2. 处理审批需求
+                    if result.get("status") == "pending":
+                        approval_id = result.get("approval_id")
+                        approval_data = result.get("data", {})
+                        
+                        print("\n🔔 工具需要审批:")
+                        print(f"   审批ID: {approval_id}")
+                        print(f"   工具: {call['function']['name']}")
+                        print(f"   参数: {call['function']['arguments']}")
+                        print(f"   安全评估: {approval_data.get('safety_assessment', {})}")
+                        print(f"   消息: {approval_data.get('message', '')}")
+                        
+                        # 交互式审批
+                        while True:
+                            choice = input("\n请选择操作 (1-批准, 2-拒绝): ")
+                            if choice == "1":
+                                # 批准工具执行
+                                approval_result = await self.tool_manager.approve_tool(approval_id)
+                                print(f"✅ 批准结果: {approval_result}")
+                                result = approval_result
+                                break
+                            elif choice == "2":
+                                # 拒绝工具执行
+                                rejection_result = await self.tool_manager.reject_tool(approval_id)
+                                print(f"❌ 拒绝结果: {rejection_result}")
+                                result = rejection_result
+                                break
+                            else:
+                                print("❌ 无效选择，请重新输入")
+
+                    # 3. 将工具结果加入 messages
                     if result.get("success") is False:
+                        error_msg = result.get("error", "") or result.get("message", "")
                         messages.append({
                             "role": "user",
-                            "content": f"工具调用 {call['id']} 失败：{result.get('error', '')}"
+                            "content": f"工具调用 {call['id']} 失败：{error_msg}"
                         })
                         continue
 
-                    msg = result.get("result", {}).get("data", "")
-                    await self.append_tool_call(messages, call, msg)
+                    msg = result.get("result", {}).get("data", "") or result.get("result", "")
+                    await self.append_tool_call(messages, call, msg, final_answer)
                     # 注意：不要 break —— event 的流要读完
                     continue
 
@@ -306,18 +337,18 @@ class ToolUsingAgent(BaseAgent):
         return "{\"error\": \"Exceeded max ReAct steps\"}"
 
     @staticmethod
-    async def append_tool_call(messages, call, msg):
+    async def append_tool_call(messages, call, msg, final_answer = ""):
         """添加工具调用结果到消息列表"""
         # 先插入 tool 消息
         messages.append({
             "role": "tool",
             "tool_call_id": call["id"],
-            "content": msg,
+            "content": str(msg),
         })
         # 再插入 assistant(tool_call) 消息
         messages.insert(-1, {
             "role": "assistant",
-            "content": "",
+            "content": final_answer,
             "tool_calls": [
                 {
                     "id": call["id"],

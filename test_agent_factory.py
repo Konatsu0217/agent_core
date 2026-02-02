@@ -1,4 +1,7 @@
 import asyncio
+import datetime
+import time
+
 from src.agent.agent_factory import AgentFactory
 from src.domain.models.agent_data_models import AgentRequest
 
@@ -19,7 +22,7 @@ async def test_agent_factory():
     # 注册服务
     container.register("query_wrapper", DefaultQueryWrapper())
     container.register("tool_manager", McpToolManager())
-    container.register("memory_service", Mem0MemoryService())
+    # container.register("memory_service", Mem0MemoryService())
     container.register("prompt_service", PePromptService())
     container.register("session_service", DefaultSessionService())
     print("✅ 所有服务注册完成")
@@ -37,7 +40,7 @@ async def test_agent_factory():
     
     # 测试处理请求
     test_request = AgentRequest(
-        query="你好，基础agent",
+        query=f"你好，帮我看下bilibili今天的热榜前十，把标题输出到txt文件里，当前时间是{datetime.datetime.now().strftime('%Y%m%d%H%M%S')}",
         session_id="test_session_123",
         extraInfo={"add_memory": True}
     )
