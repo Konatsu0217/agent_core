@@ -90,8 +90,6 @@ async def run_llm_with_tools(llm_client, messages, tools, pipe: ProcessPipe | No
                 "role": buffer_delta["role"],
                 "content": "".join(buffer_delta["content"]),
             }
-            if pipe:
-                await pipe.final_text("".join(buffer_delta["content"]))
             return
 
 class ExecutionMode(Enum):
@@ -348,9 +346,13 @@ class ToolUsingAgent(BaseAgent):
             # ========= 一轮流结束后 =========
             if tool_call_found:
                 # 有工具调用 → 开启下一轮 LLM 运行
+                print("检测到工具调用，进入下一轮")
                 continue
 
             # 没有工具调用 → 直接返回最终答案
+            print("无工具调用，返回最终结果")
+            if pipe:
+                await pipe.final_text(final_answer or "")
             return final_answer
 
         # 超出最大循环
@@ -359,14 +361,7 @@ class ToolUsingAgent(BaseAgent):
     @staticmethod
     async def append_tool_call(messages, call, msg, final_answer = ""):
         """添加工具调用结果到消息列表"""
-        # 先插入 tool 消息
         messages.append({
-            "role": "tool",
-            "tool_call_id": call["id"],
-            "content": str(msg),
-        })
-        # 再插入 assistant(tool_call) 消息
-        messages.insert(-1, {
             "role": "assistant",
             "content": final_answer,
             "tool_calls": [
@@ -379,6 +374,11 @@ class ToolUsingAgent(BaseAgent):
                     }
                 }
             ]
+        })
+        messages.append({
+            "role": "tool",
+            "tool_call_id": call["id"],
+            "content": str(msg),
         })
 
 

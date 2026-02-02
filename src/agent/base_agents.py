@@ -50,13 +50,14 @@ class BasicAgent(BaseAgent):
             from src.agent.abs_agent import run_llm_with_tools
 
             async def _run():
-                async for _ in run_llm_with_tools(
+                async for event in run_llm_with_tools(
                         self.backbone_llm_client,
                         messages,
                         tools,
                         pipe
                 ):
-                    pass
+                    if event["event"] == "final_content":
+                        await pipe.final_text(event["content"])
 
             asyncio.create_task(_run())
             return pipe
@@ -168,13 +169,14 @@ class MemoryOnlyAgent(MemoryAwareAgent):
             from src.agent.abs_agent import run_llm_with_tools
 
             async def _run():
-                async for _ in run_llm_with_tools(
+                async for event in run_llm_with_tools(
                         self.backbone_llm_client,
                         messages,
                         tools,
                         pipe
                 ):
-                    pass
+                    if event["event"] == "final_content":
+                        await pipe.final_text(event["content"])
                 if request.extraInfo.get("add_memory", True) and self.memory_service:
                     text = await pipe.final
                     self.response_cache["query"] = query
