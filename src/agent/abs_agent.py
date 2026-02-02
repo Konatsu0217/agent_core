@@ -119,8 +119,8 @@ class IBaseAgent(ABC):
         pass
 
     @abstractmethod
-    async def process(self, request: AgentRequest) -> ProcessPipe:
-        """处理用户请求，返回管道以供订阅"""
+    async def process(self, request: AgentRequest, pipe: ProcessPipe) -> None:
+        """处理用户请求，使用传入管道写出事件"""
         pass
 
     @abstractmethod
@@ -203,9 +203,8 @@ class BaseAgent(IBaseAgent, ServiceAwareAgent):
         """初始化 Agent"""
         pass
 
-    async def process(self, request) -> ProcessPipe:
+    async def process(self, request, pipe: ProcessPipe) -> None:
         """处理用户请求"""
-        # 子类需要实现此方法
         return None
 
     async def build_context(self, session_id: str, user_query: str, **kwargs):

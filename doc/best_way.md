@@ -46,10 +46,12 @@ async def best_way():
         session_id="test_session_123"
     )
     
-    print("=== Step 4: 监听返回的pipe内部的消息 ===")
-    pipe = await basic_agent.process(test_request)
+    print("=== Step 4: 监听pipe内的消息 ===")
+    pipe = ProcessPipe()
+    await basic_agent.process(test_request, pipe)
 
     collected = []
+
     async for event in pipe.reader():
         if event["type"] == "text_delta":
             chunk = event["payload"]["text"]

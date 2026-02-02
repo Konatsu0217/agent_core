@@ -2,13 +2,15 @@ import asyncio
 import json
 from src.agent.agent_factory import AgentFactory
 from src.domain.models.agent_data_models import AgentRequest
+from src.infrastructure.utils.pipe import ProcessPipe
 
 async def main(mock_input: str):
     agent = await AgentFactory.get_basic_agent()
     await agent.initialize()
 
     request = AgentRequest(query=mock_input)
-    pipe = await agent.process(request)
+    pipe = ProcessPipe()
+    await agent.process(request, pipe)
 
     collected = []
     async for event in pipe.reader():

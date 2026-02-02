@@ -35,11 +35,10 @@ class BasicAgent(BaseAgent):
         """初始化 Agent"""
         pass
 
-    async def process(self, request: AgentRequest) -> ProcessPipe:
+    async def process(self, request: AgentRequest, pipe: ProcessPipe) -> None:
         try:
             query = request.query
             session_id = request.session_id
-            pipe = ProcessPipe()
 
             context = await self.build_context(session_id, query, **request.extraInfo)
             messages = await assemble_messages([context.system_prompt, context.session, context.messages])
@@ -60,11 +59,8 @@ class BasicAgent(BaseAgent):
                         await pipe.final_text(event["content"])
 
             asyncio.create_task(_run())
-            return pipe
         except Exception as e:
-            pipe = ProcessPipe()
             await pipe.error(str(e))
-            return pipe
 
     def get_capabilities(self) -> dict:
         """返回 Agent 能力描述"""
@@ -99,11 +95,10 @@ class ToolOnlyAgent(ToolUsingAgent):
         # 初始化服务
         self._initialize_services(agent_profile.get("services_needed", []))
 
-    async def process(self, request: AgentRequest) -> ProcessPipe:
+    async def process(self, request: AgentRequest, pipe: ProcessPipe) -> None:
         try:
             query = request.query
             session_id = request.session_id
-            pipe = ProcessPipe()
 
             context = await self.build_context(session_id, query, **request.extraInfo)
             messages = await assemble_messages(([context.system_prompt, context.messages]))
@@ -115,11 +110,8 @@ class ToolOnlyAgent(ToolUsingAgent):
                 await self.run_with_tools(messages, tools, pipe)
 
             asyncio.create_task(_run())
-            return pipe
         except Exception as e:
-            pipe = ProcessPipe()
             await pipe.error(str(e))
-            return pipe
 
     def get_capabilities(self) -> dict:
         """返回 Agent 能力描述"""
@@ -154,11 +146,10 @@ class MemoryOnlyAgent(MemoryAwareAgent):
         # 初始化服务
         self._initialize_services(agent_profile.get("services_needed", []))
 
-    async def process(self, request: AgentRequest) -> ProcessPipe:
+    async def process(self, request: AgentRequest, pipe: ProcessPipe) -> None:
         try:
             query = request.query
             session_id = request.session_id
-            pipe = ProcessPipe()
 
             context = await self.build_context(session_id, query, **request.extraInfo)
             messages = await assemble_messages(([context.system_prompt, context.messages]))
@@ -184,11 +175,8 @@ class MemoryOnlyAgent(MemoryAwareAgent):
                     asyncio.create_task(self.add_memory(request.session_id))
 
             asyncio.create_task(_run())
-            return pipe
         except Exception as e:
-            pipe = ProcessPipe()
             await pipe.error(str(e))
-            return pipe
 
     def get_capabilities(self) -> dict:
         """返回 Agent 能力描述"""
@@ -252,11 +240,10 @@ class CombinedAgent(ToolUsingAgent, MemoryAwareAgent):
         except ImportError:
             print("⚠️ 上下文构建器未初始化")
 
-    async def process(self, request: AgentRequest) -> ProcessPipe:
+    async def process(self, request: AgentRequest, pipe: ProcessPipe) -> None:
         try:
             query = request.query
             session_id = request.session_id
-            pipe = ProcessPipe()
 
             context = await self.build_context(session_id, query, **request.extraInfo)
             messages = await assemble_messages(([context.system_prompt, context.messages]))
@@ -273,11 +260,8 @@ class CombinedAgent(ToolUsingAgent, MemoryAwareAgent):
                     asyncio.create_task(self.add_memory(request.session_id))
 
             asyncio.create_task(_run())
-            return pipe
         except Exception as e:
-            pipe = ProcessPipe()
             await pipe.error(str(e))
-            return pipe
 
     def get_capabilities(self) -> dict:
         """返回 Agent 能力描述"""

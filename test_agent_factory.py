@@ -4,6 +4,7 @@ import time
 
 from src.agent.agent_factory import AgentFactory
 from src.domain.models.agent_data_models import AgentRequest
+from src.infrastructure.utils.pipe import ProcessPipe
 
 async def test_agent_factory():
     """测试 AgentFactory 创建不同类型的 Agent"""
@@ -44,7 +45,8 @@ async def test_agent_factory():
         session_id="test_session_123"
     )
 
-    pipe = await basic_agent.process(test_request)
+    pipe = ProcessPipe()
+    await basic_agent.process(test_request, pipe)
 
     collected = []
     async for event in pipe.reader():
