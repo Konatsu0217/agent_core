@@ -56,10 +56,39 @@ class DefaultContextMaker(IContextMaker):
         self.session_service = session_service
         self.agent_profile = None
         self.augmenters = []
+        self._augmenters_loaded = False
     
     def add_augmenter(self, augmenter):
         """添加上下文增强器"""
         self.augmenters.append(augmenter)
+    
+    def _load_augmenters_from_profile(self):
+        if self._augmenters_loaded:
+            return
+        augmenters_cfg = {}
+        try:
+            augmenters_cfg = (self.agent_profile or {}).get("augmenters", [])
+        except Exception:
+            augmenters_cfg = []
+        if isinstance(augmenters_cfg, list):
+            try:
+                from src.context.augmenters import create_augmenter
+            except Exception:
+                create_augmenter = None
+            for item in augmenters_cfg:
+                name = None
+                params = None
+                if isinstance(item, str):
+                    name = item
+                elif isinstance(item, dict):
+                    name = item.get("name")
+                    params = item.get("params") or item.get("args") or {}
+                if not name or not create_augmenter:
+                    continue
+                aug = create_augmenter(name, params)
+                if aug:
+                    self.add_augmenter(aug)
+        self._augmenters_loaded = True
     
     async def build_context(self, session_id: str, user_query: str, **kwargs) -> Context:
         """构建上下文"""
@@ -77,6 +106,7 @@ class DefaultContextMaker(IContextMaker):
         await self._build_prompt_and_tools(context, **kwargs)
         
         # 增强上下文
+        self._load_augmenters_from_profile()
         for augmenter in self.augmenters:
             context = await augmenter.augment(context, **kwargs)
         

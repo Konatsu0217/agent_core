@@ -40,7 +40,7 @@ async def test_agent_factory():
     
     # 测试处理请求
     test_request = AgentRequest(
-        query=f"你好，帮我看下bilibili今天的热榜前十，把标题输出到txt文件里，当前时间是{datetime.datetime.now().strftime('%Y%m%d%H%M%S')}",
+        query=f"你好，帮我看下bilibili今天的热榜前十，把标题输出到txt文件里，你知道今天的日期吗？",
         session_id="test_session_123",
         extraInfo={"add_memory": True}
     )
