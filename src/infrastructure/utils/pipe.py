@@ -91,3 +91,13 @@ class ProcessPipe:
 
     async def error(self, message: str) -> None:
         await self.write({"type": "error", "payload": {"message": message}})
+
+    async def close(self, message: str | None = None) -> None:
+        for approval_id, fut in list(self._approval_waiters.items()):
+            if not fut.done():
+                fut.set_result("rejected")
+            self._approval_waiters.pop(approval_id, None)
+        self._approval_results.clear()
+        if message:
+            await self.error(message)
+        await self.final_text("")
