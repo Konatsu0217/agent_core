@@ -3,7 +3,7 @@ from typing import Any, AsyncIterator, Dict, TypedDict, Literal
 
 
 class AgentEvent(TypedDict):
-    type: Literal["text_delta", "tool_call", "tool_result", "final", "error", "approval_required"]
+    type: Literal["text_delta", "tool_call", "tool_result", "final", "error", "approval_required", "approval_decision"]
     payload: Dict[str, Any]
 
 
@@ -12,6 +12,8 @@ class ProcessPipe:
         self._queue: asyncio.Queue[AgentEvent] = asyncio.Queue()
         loop = asyncio.get_event_loop()
         self._final: asyncio.Future[str] = loop.create_future()
+        self._approval_waiters: Dict[str, asyncio.Future[str]] = {}
+        self._approval_results: Dict[str, str] = {}
 
     @property
     def final(self) -> asyncio.Future[str]:
@@ -51,6 +53,38 @@ class ProcessPipe:
                 "safety_assessment": safety_assessment or {}
             }
         })
+
+    async def approval_decision(self, approval_id: str, decision: Literal["approved", "rejected"], message: str = "") -> None:
+        await self.write({
+            "type": "approval_decision",
+            "payload": {
+                "approval_id": approval_id,
+                "decision": decision,
+                "message": message,
+            }
+        })
+        fut = self._approval_waiters.get(approval_id)
+        if fut and not fut.done():
+            fut.set_result(decision)
+            self._approval_waiters.pop(approval_id, None)
+        else:
+            self._approval_results[approval_id] = decision
+
+    async def wait_for_approval(self, approval_id: str, timeout: float | None = None) -> str:
+        existing = self._approval_results.pop(approval_id, None)
+        if existing:
+            return existing
+        loop = asyncio.get_event_loop()
+        fut = loop.create_future()
+        self._approval_waiters[approval_id] = fut
+        try:
+            if timeout is not None:
+                decision = await asyncio.wait_for(fut, timeout=timeout)
+            else:
+                decision = await fut
+            return decision
+        finally:
+            self._approval_waiters.pop(approval_id, None)
 
     async def final_text(self, text: str) -> None:
         await self.write({"type": "final", "payload": {"text": text}})

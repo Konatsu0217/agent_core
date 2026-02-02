@@ -121,7 +121,7 @@ class McpToolManager(IToolManager):
         }
         
         return {
-            "success": True,
+            "success": False,
             "status": "rejected",
             "message": "Tool execution rejected"
         }

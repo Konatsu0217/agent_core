@@ -12,6 +12,8 @@ async def best_way():
     
     from src.domain.models.agent_data_models import AgentRequest
     
+    from src.infrastructure.utils.pipe import ProcessPipe
+    
     
     print("=== Step 0: 创建服务的容器，注册必备的服务 ===")
     # 获取服务容器
@@ -42,16 +44,16 @@ async def best_way():
     print("=== Step 3: 构造请求体 ===")
     # 测试处理请求
     test_request = AgentRequest(
-        query=f"你好呀，请你帮我看看今天的b站热门榜单前十有什么可以嘛，访问一下网络",
+        query=f"把我目录下的'.env.example'文件删了",
         session_id="test_session_123"
     )
+
     
-    print("=== Step 4: 监听pipe内的消息 ===")
+    print("=== Step 4: 监听管道内事件 ===")
     pipe = ProcessPipe()
     await basic_agent.process(test_request, pipe)
 
     collected = []
-
     async for event in pipe.reader():
         if event["type"] == "text_delta":
             chunk = event["payload"]["text"]
@@ -64,5 +66,30 @@ async def best_way():
             pass
         elif event["type"] == "final":
             pass
+        elif event["type"] == "approval_required":
+            # 工具调用审批
+            payload = event["payload"]
+            approval_id = payload.get("approval_id", "")
+            await approve_tool(payload, pipe, approval_id)
+        elif event["type"] == "approval_decision":
+            pass
+
+
+async def approve_tool(payload, pipe, approval_id):
+    print("\n🔔 工具需要审批:")
+    print(f"   审批ID: {payload.get("approval_id")}")
+    print(f"   工具: {payload.get("name")}")
+    print(f"   参数: {payload.get("arguments")}")
+    print(f"   安全评估: {payload.get('safety_assessment', {})}")
+    print(f"   消息: {payload.get('message', '')}")
+
+    while True:
+        choice = input("\n请选择操作 (1-批准, 2-拒绝): ")
+        if choice == "1":
+            await pipe.approval_decision(approval_id, "approved")
+            return
+        else:
+            await pipe.approval_decision(approval_id, "rejected")
+            return
 
 ```
