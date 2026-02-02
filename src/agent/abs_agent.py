@@ -4,11 +4,12 @@ from enum import Enum
 from typing import Any, Dict, List
 
 from src.context.context_maker import IContextMaker
-from src.domain.models.agent_data_models import AgentRequest, AgentResponse
+from src.domain.models.agent_data_models import AgentRequest
 from src.infrastructure.clients.llm_clients.llm_client_manager import static_llmClientManager
+from src.infrastructure.utils.pipe import ProcessPipe
 
 
-async def run_llm_with_tools(llm_client, messages, tools):
+async def run_llm_with_tools(llm_client, messages, tools, pipe: ProcessPipe | None = None):
     buffer_delta = {"role": None, "content": []}
     tool_call_accumulator = {}
 
@@ -30,8 +31,9 @@ async def run_llm_with_tools(llm_client, messages, tools):
 
         # ==== Content ====
         if delta.get("content"):
-            print(delta["content"], end="", flush=True)
             buffer_delta["content"].append(delta["content"])
+            if pipe:
+                await pipe.text_delta(delta["content"])
 
         # ==== Tool Calls ====
         if delta.get("tool_calls"):
@@ -117,8 +119,8 @@ class IBaseAgent(ABC):
         pass
 
     @abstractmethod
-    async def process(self, request: AgentRequest) -> AgentResponse:
-        """处理用户请求，默认过程中流式，最终结果非流式"""
+    async def process(self, request: AgentRequest, pipe: ProcessPipe) -> None:
+        """处理用户请求，使用传入管道写出事件"""
         pass
 
     @abstractmethod
@@ -201,9 +203,8 @@ class BaseAgent(IBaseAgent, ServiceAwareAgent):
         """初始化 Agent"""
         pass
 
-    async def process(self, request):
+    async def process(self, request, pipe: ProcessPipe) -> None:
         """处理用户请求"""
-        # 子类需要实现此方法
         return None
 
     async def build_context(self, session_id: str, user_query: str, **kwargs):
@@ -249,9 +250,9 @@ class ToolUsingAgent(BaseAgent):
         """设置工具管理器"""
         self.tool_manager = tool_manager
 
-    async def run_with_tools(self, messages: list[dict[str, Any]], tools: list[dict[str, Any]]) -> str:
+    async def run_with_tools(self, messages: list[dict[str, Any]], tools: list[dict[str, Any]], pipe: ProcessPipe | None = None) -> str:
         """使用工具运行"""
-        MAX_STEPS = 10  # 防死循环
+        MAX_STEPS = int(self.agent_profile.get("behavior").get("max_tool_calls"))  # 防死循环
 
         for _ in range(MAX_STEPS):
             # === 启动一轮 LLM 流式输出 ===
@@ -261,13 +262,16 @@ class ToolUsingAgent(BaseAgent):
             async for event in run_llm_with_tools(
                     self.backbone_llm_client,
                     messages,
-                    tools
+                    tools,
+                    pipe
             ):
                 # ======== 工具调用 ========
                 if event["event"] == "tool_call":
                     tool_call_found = True
                     call = event["tool_call"]
                     print(f"❕发现工具调用: {call}")
+                    if pipe:
+                        await pipe.tool_call(name=call['function']['name'], arguments=call['function']['arguments'])
 
                     # 1. 执行工具
                     if self.tool_manager:
@@ -275,16 +279,52 @@ class ToolUsingAgent(BaseAgent):
                     else:
                         result = {"success": False, "error": "No tool manager set"}
 
-                    # 2. 将工具结果加入 messages
+                    # 2. 处理审批需求
+                    if result.get("status") == "pending":
+                        approval_id = result.get("approval_id")
+                        approval_data = result.get("data", {})
+
+                        if pipe:
+                            await pipe.approval_required(
+                                name=call['function']['name'],
+                                arguments=call['function']['arguments'],
+                                approval_id=approval_id,
+                                message=approval_data.get('message', ''),
+                                safety_assessment=approval_data.get('safety_assessment', {})
+                            )
+                        
+                        # 审批决定由 pipe 提供
+                        if pipe:
+                            decision = await pipe.wait_for_approval(approval_id)
+                            if decision == "approved":
+                                approval_result = await self.tool_manager.approve_tool(approval_id)
+                                print(f"✅ 批准结果: {approval_result}")
+                                result = approval_result
+                            else:
+                                rejection_result = await self.tool_manager.reject_tool(approval_id)
+                                print(f"❌ 拒绝结果: {rejection_result}")
+                                result = rejection_result
+                        else:
+                            rejection_result = await self.tool_manager.reject_tool(approval_id)
+                            print(f"❌ 拒绝结果: {rejection_result}")
+                            result = rejection_result
+
+                    # 3. 将工具结果加入 messages
                     if result.get("success") is False:
+                        error_msg = result.get("error", "") or result.get("message", "")
+                        if pipe:
+                            await pipe.tool_result(call['function']['name'], False, {"error": error_msg})
                         messages.append({
                             "role": "user",
-                            "content": f"工具调用 {call['id']} 失败：{result.get('error', '')}"
+                            "content": f"工具调用 {call['id']} 失败：{error_msg}"
                         })
                         continue
 
-                    msg = result.get("result", {}).get("data", "")
-                    await self.append_tool_call(messages, call, msg)
+                    msg = result.get("result", {}).get("data", "") or result.get("result", "")
+                    if pipe:
+                        await pipe.tool_result(call['function']['name'], True, msg)
+                    await self.append_tool_call(messages, call, msg, final_answer)
+
                     # 注意：不要 break —— event 的流要读完
                     continue
 
@@ -297,27 +337,24 @@ class ToolUsingAgent(BaseAgent):
             # ========= 一轮流结束后 =========
             if tool_call_found:
                 # 有工具调用 → 开启下一轮 LLM 运行
+                print("检测到工具调用，进入下一轮")
                 continue
 
             # 没有工具调用 → 直接返回最终答案
+            print("无工具调用，返回最终结果")
+            if pipe:
+                await pipe.final_text(final_answer or "")
             return final_answer
 
         # 超出最大循环
         return "{\"error\": \"Exceeded max ReAct steps\"}"
 
     @staticmethod
-    async def append_tool_call(messages, call, msg):
+    async def append_tool_call(messages, call, msg, final_answer = ""):
         """添加工具调用结果到消息列表"""
-        # 先插入 tool 消息
         messages.append({
-            "role": "tool",
-            "tool_call_id": call["id"],
-            "content": msg,
-        })
-        # 再插入 assistant(tool_call) 消息
-        messages.insert(-1, {
             "role": "assistant",
-            "content": "",
+            "content": final_answer,
             "tool_calls": [
                 {
                     "id": call["id"],
@@ -328,6 +365,11 @@ class ToolUsingAgent(BaseAgent):
                     }
                 }
             ]
+        })
+        messages.append({
+            "role": "tool",
+            "tool_call_id": call["id"],
+            "content": str(msg),
         })
 
 

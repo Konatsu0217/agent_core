@@ -20,17 +20,16 @@ class IContextMaker(ABC):
         pass
 
     @staticmethod
-    def build_custom_message_struct(*components, **kwargs) -> List[Dict[str, Any]]:
+    def build_custom_message_struct(components: List[Any], **kwargs) -> List[Dict[str, Any]]:
         """按传入顺序构建自定义上下文
         
         Args:
-            *components: 要拼接的组件，可以是字符串或字典
+            components: 要拼接的组件列表
             **kwargs: 额外参数
             
         Returns:
             拼接后的消息列表
         """
-        """按传入顺序构建自定义上下文"""
         messages = []
 
         for component in components:
@@ -41,13 +40,8 @@ class IContextMaker(ABC):
                 # 如果是字典且非空，直接添加
                 messages.append(component)
             elif isinstance(component, list):
-                # 如果是列表，递归处理
-                for item in component:
-                    if item:
-                        if isinstance(item, dict):
-                            messages.append(item)
-                        elif isinstance(item, str):
-                            messages.append({"role": "system", "content": item})
+                # 如果是列表，直接添加整个列表
+                messages.extend(component)
 
         return messages
 
@@ -62,10 +56,39 @@ class DefaultContextMaker(IContextMaker):
         self.session_service = session_service
         self.agent_profile = None
         self.augmenters = []
+        self._augmenters_loaded = False
     
     def add_augmenter(self, augmenter):
         """添加上下文增强器"""
         self.augmenters.append(augmenter)
+    
+    def _load_augmenters_from_profile(self):
+        if self._augmenters_loaded:
+            return
+        augmenters_cfg = {}
+        try:
+            augmenters_cfg = (self.agent_profile or {}).get("augmenters", [])
+        except Exception:
+            augmenters_cfg = []
+        if isinstance(augmenters_cfg, list):
+            try:
+                from src.context.augmenters import create_augmenter
+            except Exception:
+                create_augmenter = None
+            for item in augmenters_cfg:
+                name = None
+                params = None
+                if isinstance(item, str):
+                    name = item
+                elif isinstance(item, dict):
+                    name = item.get("name")
+                    params = item.get("params") or item.get("args") or {}
+                if not name or not create_augmenter:
+                    continue
+                aug = create_augmenter(name, params)
+                if aug:
+                    self.add_augmenter(aug)
+        self._augmenters_loaded = True
     
     async def build_context(self, session_id: str, user_query: str, **kwargs) -> Context:
         """构建上下文"""
@@ -83,6 +106,7 @@ class DefaultContextMaker(IContextMaker):
         await self._build_prompt_and_tools(context, **kwargs)
         
         # 增强上下文
+        self._load_augmenters_from_profile()
         for augmenter in self.augmenters:
             context = await augmenter.augment(context, **kwargs)
         
@@ -170,7 +194,7 @@ class DefaultContextMaker(IContextMaker):
 
             # 更新上下文
             context.system_prompt = system_prompt
-            context.messages = [{"role": "user", "content": {user_query}}]
+            context.messages = [{"role": "user", "content": user_query}]
             context.tools = tools
             context.memory = rag_results
             context.session = session_history

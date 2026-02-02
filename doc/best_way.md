@@ -1,32 +1,34 @@
-import asyncio
-
-from src.agent.agent_factory import AgentFactory
-from src.domain.models.agent_data_models import AgentRequest
-from src.infrastructure.utils.pipe import ProcessPipe
-
-
-async def test_agent_factory():
-    """测试 AgentFactory 创建不同类型的 Agent"""
-
+```python
+async def best_way():
     # 初始化服务容器
     from src.di.container import get_service_container
     from src.services.impl.default_query_wrapper_service import DefaultQueryWrapper
     from src.services.impl.mcp_tool_manager import McpToolManager
+    from src.services.impl.mem0_memory_service import Mem0MemoryService
     from src.services.impl.pe_prompt_service import PePromptService
     from src.services.impl.default_session_service import DefaultSessionService
-
+    
+    from src.agent.agent_factory import AgentFactory
+    
+    from src.domain.models.agent_data_models import AgentRequest
+    
+    from src.infrastructure.utils.pipe import ProcessPipe
+    
+    
+    print("=== Step 0: 创建服务的容器，注册必备的服务 ===")
     # 获取服务容器
     container = get_service_container()
-
+    
     # 注册服务
     container.register("query_wrapper", DefaultQueryWrapper())
     container.register("tool_manager", McpToolManager())
-    # container.register("memory_service", Mem0MemoryService())
+    container.register("memory_service", Mem0MemoryService())
     container.register("prompt_service", PePromptService())
     container.register("session_service", DefaultSessionService())
     print("✅ 所有服务注册完成")
-
-    print("=== 测试 1: 创建基础Fast Agent===")
+    
+    
+    print("=== Step 1: 创建基础Fast Agent ===")
     basic_agent = await AgentFactory.get_basic_agent()
     print(f"Agent 类型: {type(basic_agent).__name__}")
     print(f"Agent 名称: {basic_agent.name}")
@@ -35,14 +37,19 @@ async def test_agent_factory():
     print(f"输出格式: {basic_agent.output_format}")
     print(f"需要的服务: {basic_agent.services_needed}")
     print(f"能力描述: {basic_agent.get_capabilities()}")
+    
+    print("=== Step 2: 进行Agent的初始化 ===")
     await basic_agent.initialize()
-
+    
+    print("=== Step 3: 构造请求体 ===")
     # 测试处理请求
     test_request = AgentRequest(
         query=f"把我目录下的'.env.example'文件删了",
         session_id="test_session_123"
     )
 
+    
+    print("=== Step 4: 监听管道内事件 ===")
     pipe = ProcessPipe()
     await basic_agent.process(test_request, pipe)
 
@@ -60,6 +67,7 @@ async def test_agent_factory():
         elif event["type"] == "final":
             pass
         elif event["type"] == "approval_required":
+            # 工具调用审批
             payload = event["payload"]
             approval_id = payload.get("approval_id", "")
             await approve_tool(payload, pipe, approval_id)
@@ -84,6 +92,4 @@ async def approve_tool(payload, pipe, approval_id):
             await pipe.approval_decision(approval_id, "rejected")
             return
 
-
-if __name__ == "__main__":
-    asyncio.run(test_agent_factory())
+```
