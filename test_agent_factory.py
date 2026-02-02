@@ -40,12 +40,27 @@ async def test_agent_factory():
     
     # 测试处理请求
     test_request = AgentRequest(
-        query=f"你好，帮我看下bilibili今天的热榜前十，把标题输出到txt文件里，你知道今天的日期吗？",
+        query=f"你帮我上网查一下明天深圳天气怎么样嘛",
         session_id="test_session_123",
         extraInfo={"add_memory": True}
     )
-    response = await basic_agent.process(test_request)
-    print(f"响应结果: {response}")
+
+    pipe = await basic_agent.process(test_request)
+
+    collected = []
+    async for event in pipe.reader():
+        if event["type"] == "text_delta":
+            chunk = event["payload"]["text"]
+            collected.append(chunk)
+            print(f"\033[31m{chunk}\033[0m", end="", flush=True)
+        elif event["type"] == "tool_call":
+            # 这里可以直接先返回一个气泡
+            pass
+        elif event["type"] == "tool_result":
+            pass
+        elif event["type"] == "final":
+            pass
+
     print()
 
 

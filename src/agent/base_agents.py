@@ -1,10 +1,10 @@
 import asyncio
-import json
 from typing import Any, Dict
 
 from src.agent.abs_agent import ExecutionMode, BaseAgent, ToolUsingAgent, \
     MemoryAwareAgent, assemble_messages
-from src.domain.models import AgentRequest, AgentResponse
+from src.domain.models import AgentRequest
+from src.infrastructure.utils.pipe import ProcessPipe
 
 
 class BasicAgent(BaseAgent):
@@ -35,54 +35,35 @@ class BasicAgent(BaseAgent):
         """初始化 Agent"""
         pass
 
-    async def process(self, request: AgentRequest) -> AgentResponse:
-        """处理用户请求"""
+    async def process(self, request: AgentRequest) -> ProcessPipe:
         try:
             query = request.query
             session_id = request.session_id
+            pipe = ProcessPipe()
 
-            # 使用ContextMaker构建上下文
             context = await self.build_context(session_id, query, **request.extraInfo)
-            
-            # 按顺序组合消息：system_prompt -> messages
             messages = await assemble_messages([context.system_prompt, context.session, context.messages])
             if not messages:
                 messages = [{"role": "user", "content": query}]
-            
             tools = context.tools or []
 
-            # 使用工具运行（虽然没有工具）
             from src.agent.abs_agent import run_llm_with_tools
-            result = ""
 
-            async for event in run_llm_with_tools(
-                    self.backbone_llm_client,
-                    messages,
-                    tools  # 使用上下文中的工具列表
-            ):
-                if event["event"] == "final_content":
-                    result = event["content"]
-                    break
+            async def _run():
+                async for _ in run_llm_with_tools(
+                        self.backbone_llm_client,
+                        messages,
+                        tools,
+                        pipe
+                ):
+                    pass
 
-            # 解析响应
-            try:
-                import json
-                result_json = json.loads(result)
-            except json.JSONDecodeError:
-                result_json = {"response": result}
-
-            return AgentResponse(
-                pure_text=result,
-                response=result_json,
-                session_id=request.session_id
-            )
+            asyncio.create_task(_run())
+            return pipe
         except Exception as e:
-            print(f"❌ Unexpected error: {e}")
-            return AgentResponse(
-                pure_text="",
-                response={"error": str(e)},
-                session_id=request.session_id
-            )
+            pipe = ProcessPipe()
+            await pipe.error(str(e))
+            return pipe
 
     def get_capabilities(self) -> dict:
         """返回 Agent 能力描述"""
@@ -117,43 +98,27 @@ class ToolOnlyAgent(ToolUsingAgent):
         # 初始化服务
         self._initialize_services(agent_profile.get("services_needed", []))
 
-    async def process(self, request: AgentRequest) -> AgentResponse:
-        """处理用户请求"""
+    async def process(self, request: AgentRequest) -> ProcessPipe:
         try:
             query = request.query
             session_id = request.session_id
+            pipe = ProcessPipe()
 
-            # 使用ContextMaker构建上下文
             context = await self.build_context(session_id, query, **request.extraInfo)
-            
-            # 按顺序组合消息：system_prompt -> messages
             messages = await assemble_messages(([context.system_prompt, context.messages]))
             if not messages:
                 messages = [{"role": "user", "content": query}]
-            
             tools = context.tools or []
 
-            # 使用工具运行
-            result = await self.run_with_tools(messages, tools)
+            async def _run():
+                await self.run_with_tools(messages, tools, pipe)
 
-            # 解析响应
-            try:
-                result_json = json.loads(result)
-            except json.JSONDecodeError:
-                result_json = {"response": result}
-
-            return AgentResponse(
-                pure_text=result,
-                response=result_json,
-                session_id=request.session_id
-            )
+            asyncio.create_task(_run())
+            return pipe
         except Exception as e:
-            print(f"❌ Unexpected error: {e}")
-            return AgentResponse(
-                pure_text="",
-                response={"error": str(e)},
-                session_id=request.session_id
-            )
+            pipe = ProcessPipe()
+            await pipe.error(str(e))
+            return pipe
 
     def get_capabilities(self) -> dict:
         """返回 Agent 能力描述"""
@@ -188,62 +153,40 @@ class MemoryOnlyAgent(MemoryAwareAgent):
         # 初始化服务
         self._initialize_services(agent_profile.get("services_needed", []))
 
-    async def process(self, request: AgentRequest) -> AgentResponse:
-        """处理用户请求"""
+    async def process(self, request: AgentRequest) -> ProcessPipe:
         try:
             query = request.query
             session_id = request.session_id
+            pipe = ProcessPipe()
 
-            # 使用ContextMaker构建上下文
             context = await self.build_context(session_id, query, **request.extraInfo)
-            
-            # 按顺序组合消息：system_prompt -> messages
             messages = await assemble_messages(([context.system_prompt, context.messages]))
             if not messages:
                 messages = [{"role": "user", "content": query}]
-            
             tools = context.tools or []
 
-            # 使用工具运行（虽然没有工具）
             from src.agent.abs_agent import run_llm_with_tools
-            result = ""
 
-            async for event in run_llm_with_tools(
-                    self.backbone_llm_client,
-                    messages,
-                    tools  # 使用上下文中的工具列表
-            ):
-                if event["event"] == "final_content":
-                    result = event["content"]
-                    break
+            async def _run():
+                async for _ in run_llm_with_tools(
+                        self.backbone_llm_client,
+                        messages,
+                        tools,
+                        pipe
+                ):
+                    pass
+                if request.extraInfo.get("add_memory", True) and self.memory_service:
+                    text = await pipe.final
+                    self.response_cache["query"] = query
+                    self.response_cache["response"] = {"response": text}
+                    asyncio.create_task(self.add_memory(request.session_id))
 
-            # 解析响应
-            try:
-                import json
-                result_json = json.loads(result)
-            except json.JSONDecodeError:
-                result_json = {"response": result}
-
-            # 存储响应到缓存
-            self.response_cache["query"] = query
-            self.response_cache["response"] = result_json
-
-            # 添加到记忆
-            if request.extraInfo.get("add_memory", True) and self.memory_service:
-                asyncio.create_task(self.add_memory(request.session_id))
-
-            return AgentResponse(
-                pure_text=result,
-                response=result_json,
-                session_id=request.session_id
-            )
+            asyncio.create_task(_run())
+            return pipe
         except Exception as e:
-            print(f"❌ Unexpected error: {e}")
-            return AgentResponse(
-                pure_text="",
-                response={"error": str(e)},
-                session_id=request.session_id
-            )
+            pipe = ProcessPipe()
+            await pipe.error(str(e))
+            return pipe
 
     def get_capabilities(self) -> dict:
         """返回 Agent 能力描述"""
@@ -307,53 +250,32 @@ class CombinedAgent(ToolUsingAgent, MemoryAwareAgent):
         except ImportError:
             print("⚠️ 上下文构建器未初始化")
 
-    async def process(self, request: AgentRequest) -> AgentResponse:
-        """处理用户请求"""
+    async def process(self, request: AgentRequest) -> ProcessPipe:
         try:
             query = request.query
             session_id = request.session_id
+            pipe = ProcessPipe()
 
-            # 使用ContextMaker构建上下文
             context = await self.build_context(session_id, query, **request.extraInfo)
-            
-            # 按顺序组合消息：system_prompt -> messages
             messages = await assemble_messages(([context.system_prompt, context.messages]))
             if not messages:
                 messages = [{"role": "user", "content": query}]
-            
             tools = context.tools or []
 
-            print(messages)
+            async def _run():
+                await self.run_with_tools(messages, tools, pipe)
+                if request.extraInfo.get("add_memory", True) and self.memory_service:
+                    text = await pipe.final
+                    self.response_cache["query"] = query
+                    self.response_cache["response"] = {"response": text}
+                    asyncio.create_task(self.add_memory(request.session_id))
 
-            # 使用工具运行
-            result = await self.run_with_tools(messages, tools)
-
-            # 解析响应
-            try:
-                result_json = json.loads(result)
-            except json.JSONDecodeError:
-                result_json = {"response": result}
-
-            # 存储响应到缓存
-            self.response_cache["query"] = query
-            self.response_cache["response"] = result_json
-
-            # 添加到记忆
-            if request.extraInfo.get("add_memory", True) and self.memory_service:
-                asyncio.create_task(self.add_memory(request.session_id))
-
-            return AgentResponse(
-                pure_text=result,
-                response=result_json,
-                session_id=request.session_id
-            )
+            asyncio.create_task(_run())
+            return pipe
         except Exception as e:
-            print(f"❌ Unexpected error: {e}")
-            return AgentResponse(
-                pure_text="",
-                response={"error": str(e)},
-                session_id=request.session_id
-            )
+            pipe = ProcessPipe()
+            await pipe.error(str(e))
+            return pipe
 
     def get_capabilities(self) -> dict:
         """返回 Agent 能力描述"""
