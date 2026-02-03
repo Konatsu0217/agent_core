@@ -4,6 +4,7 @@ import time
 from threading import Lock
 from pathlib import Path
 from logging.handlers import RotatingFileHandler
+import multiprocessing as mp
 
 class Logger:
     _instance = None
@@ -22,6 +23,7 @@ class Logger:
                 # 创建并配置logger
                 self.logger = logging.getLogger("app")
                 self.logger.setLevel(logging.INFO)
+                is_main = mp.current_process().name == "MainProcess"
 
                 # 清除现有处理器（避免重复）
                 if self.logger.hasHandlers():
@@ -47,16 +49,18 @@ class Logger:
 
                 self.logger.addHandler(file_handler)
 
-                console_handler = logging.StreamHandler()
-                console_handler.setFormatter(formatter)
-                self.logger.addHandler(console_handler)
+                if is_main:
+                    console_handler = logging.StreamHandler()
+                    console_handler.setFormatter(formatter)
+                    self.logger.addHandler(console_handler)
 
                 # 禁止向根logger传播，避免重复输出
                 self.logger.propagate = False
 
                 # 测试日志
-                self.logger.info("===== 日志系统初始化成功 ======")
-                self.logger.info(f"日志文件路径: {log_path}")
+                if is_main:
+                    self.logger.info("===== 日志系统初始化成功 ======")
+                    self.logger.info(f"日志文件路径: {log_path}")
 
                 self._initialized = True
 

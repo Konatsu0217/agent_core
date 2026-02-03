@@ -9,7 +9,7 @@
   },
   "backbone_llm_config": {
     "provider": "siliconflow",
-    "openapi_url": "http://localhost:11434/v1",
+    "openapi_url": "https://api.siliconflow.cn/v1/chat/completions",
     "openapi_key": "",
     "model_name": "qwen3:8b",
     "temperature": 1.2,

@@ -1,5 +1,13 @@
-from typing import Dict, Optional, List, Any
+from typing import Dict, Optional, List, Any, Coroutine
+
+from src.agent import BaseAgent
 from src.domain.models.agent_data_models import AgentRequest, AgentResponse
+from src.infrastructure.utils.pipe import ProcessPipe
+
+
+async def run_with_pipe(agent:BaseAgent, request: AgentRequest, pipe: ProcessPipe) -> None:
+    """使用管道处理请求"""
+    await agent.process(request, pipe)
 
 
 class AgentCoordinator:
@@ -8,6 +16,22 @@ class AgentCoordinator:
     def __init__(self):
         self.agents: Dict[str, Any] = {}
         self.task_dispatcher: Optional[TaskDispatcher] = None
+        # 初始化服务容器
+        from src.di.container import get_service_container
+        from src.services.impl.default_query_wrapper_service import DefaultQueryWrapper
+        from src.services.impl.mcp_tool_manager import McpToolManager
+        from src.services.impl.pe_prompt_service import PePromptService
+        from src.services.impl.default_session_service import DefaultSessionService
+
+        # 获取服务容器
+        container = get_service_container()
+        # 注册服务
+        container.register("query_wrapper", DefaultQueryWrapper())
+        container.register("tool_manager", McpToolManager())
+        # container.register("memory_service", Mem0MemoryService())
+        container.register("prompt_service", PePromptService())
+        container.register("session_service", DefaultSessionService())
+        print("✅ 所有服务注册完成")
     
     def register_agent(self, agent):
         """注册 Agent"""
@@ -21,34 +45,29 @@ class AgentCoordinator:
         """设置任务分发器"""
         self.task_dispatcher = task_dispatcher
     
-    async def process_request(self, request: AgentRequest, agent_name: Optional[str] = None) -> AgentResponse:
+    async def process_request(self, request: AgentRequest,  pipe: ProcessPipe, agent_name: Optional[str] = None) -> None:
         """处理请求"""
         # 如果指定了 Agent，直接使用
         if agent_name:
             agent = self.get_agent(agent_name)
-            if not agent:
-                return AgentResponse(
-                    response={"error": f"Agent {agent_name} not found"},
-                    session_id=request.session_id
-                )
-            return await agent.process(request)
+            await run_with_pipe(agent, request, pipe)
+            return
         
         # 否则使用任务分发器选择 Agent
         if self.task_dispatcher:
             selected_agent = await self.task_dispatcher.select_agent(request, self.agents)
             if selected_agent:
-                return await selected_agent.process(request)
+                await run_with_pipe(selected_agent, request, pipe)
+                return
         
         # 默认使用第一个 Agent
         if self.agents:
             default_agent = next(iter(self.agents.values()))
-            return await default_agent.process(request)
-        
-        return AgentResponse(
-            response={"error": "No agents available"},
-            session_id=request.session_id
-        )
-    
+            await run_with_pipe(default_agent, request, pipe)
+            return
+
+        return
+
     async def initialize_all_agents(self):
         """初始化所有 Agent"""
         tasks = []

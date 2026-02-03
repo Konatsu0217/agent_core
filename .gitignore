@@ -130,4 +130,6 @@ Desktop.ini
 *.faiss
 *.pkl
 
+test_*.py
+
 src/agent/agent_profiles/*_agent_profile.json

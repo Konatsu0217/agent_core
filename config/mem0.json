@@ -23,7 +23,7 @@
     "distance_strategy": "euclidean",
     "vector_base_provider": "faiss",
     "collection_name": "rag_collection",
-    "vector_memory_database": "./vector_memory_database",
+    "vector_memory_database": "./data/vector_memory_database",
     "embedding_model_dims": 1024
   },
   "connection_pool": {

@@ -1,30 +1,15 @@
 import asyncio
+from time import sleep
 
 from src.agent.agent_factory import AgentFactory
+from src.coordinator.agent_coordinator import AgentCoordinator
 from src.domain.models.agent_data_models import AgentRequest
 from src.infrastructure.utils.pipe import ProcessPipe
 
 
 async def test_agent_factory():
     """测试 AgentFactory 创建不同类型的 Agent"""
-
-    # 初始化服务容器
-    from src.di.container import get_service_container
-    from src.services.impl.default_query_wrapper_service import DefaultQueryWrapper
-    from src.services.impl.mcp_tool_manager import McpToolManager
-    from src.services.impl.pe_prompt_service import PePromptService
-    from src.services.impl.default_session_service import DefaultSessionService
-
-    # 获取服务容器
-    container = get_service_container()
-
-    # 注册服务
-    container.register("query_wrapper", DefaultQueryWrapper())
-    container.register("tool_manager", McpToolManager())
-    # container.register("memory_service", Mem0MemoryService())
-    container.register("prompt_service", PePromptService())
-    container.register("session_service", DefaultSessionService())
-    print("✅ 所有服务注册完成")
+    coordinator = AgentCoordinator()
 
     print("=== 测试 1: 创建基础Fast Agent===")
     basic_agent = await AgentFactory.get_basic_agent()
@@ -37,14 +22,16 @@ async def test_agent_factory():
     print(f"能力描述: {basic_agent.get_capabilities()}")
     await basic_agent.initialize()
 
+    coordinator.register_agent(basic_agent)
+
     # 测试处理请求
     test_request = AgentRequest(
-        query=f"把我目录下的'.env.example'文件删了",
+        query=f"使用命令行工具获取bilibili的今日热榜前十，写到txt文件里",
         session_id="test_session_123"
     )
 
     pipe = ProcessPipe()
-    await basic_agent.process(test_request, pipe)
+    await coordinator.process_request(test_request, pipe)
 
     collected = []
     async for event in pipe.reader():
@@ -65,6 +52,9 @@ async def test_agent_factory():
             await approve_tool(payload, pipe, approval_id)
         elif event["type"] == "approval_decision":
             pass
+
+    await pipe.close()
+    await asyncio.sleep(20)
 
 
 async def approve_tool(payload, pipe, approval_id):

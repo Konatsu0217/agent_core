@@ -16,3 +16,10 @@ class DefaultSessionService(ISessionService):
         except Exception as e:
             print(f"⚠️ SessionManager get_session failed: {e}")
             return {}
+
+    async def update_context(self, session_id: str, messages: list[dict[str, str]]) -> None:
+        """更新会话上下文"""
+        try:
+            await self.session_manager.update_context(session_id, messages)
+        except Exception as e:
+            print(f"⚠️ SessionManager update_context failed: {e}")
