@@ -1,7 +1,7 @@
 import json
 from abc import ABC, abstractmethod
 from enum import Enum
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Coroutine
 
 from src.context.context_maker import IContextMaker
 from src.domain.models.agent_data_models import AgentRequest
@@ -224,6 +224,18 @@ class BaseAgent(IBaseAgent, ServiceAwareAgent):
                 **kwargs
             )
 
+    async def build_real_messages_and_tool(self, request: AgentRequest):
+        """构建真实的消息和工具"""
+        query = request.query
+        session_id = request.session_id
+        context = await self.build_context(session_id, query, **request.extraInfo)
+        messages = await assemble_messages([context.system_prompt, context.session, context.messages])
+        if not messages:
+            messages = [{"role": "user", "content": query}]
+        tools = context.tools or []
+        return messages, tools
+
+
     def get_capabilities(self) -> dict:
         """返回 Agent 能力描述"""
         return {
@@ -384,6 +396,13 @@ class MemoryAwareAgent(BaseAgent):
     def set_memory_service(self, memory_service):
         """设置记忆服务"""
         self.memory_service = memory_service
+
+    async def memory_hook(self, request: AgentRequest, text: str) -> Coroutine[Any, Any, None] | None:
+        if request.extraInfo.get("add_memory", True) and self.memory_service:
+            self.response_cache["query"] = request.query
+            self.response_cache["response"] = {"response": text}
+            return self.add_memory(request.session_id)
+        return None
 
     async def add_memory(self, session_id: str) -> None:
         """添加记忆"""

@@ -1,5 +1,5 @@
 import asyncio
-from typing import Any, Dict
+from typing import Any, Dict, Coroutine
 
 from src.agent.abs_agent import ExecutionMode, BaseAgent, ToolUsingAgent, \
     MemoryAwareAgent, assemble_messages
@@ -37,14 +37,7 @@ class BasicAgent(BaseAgent):
 
     async def process(self, request: AgentRequest, pipe: ProcessPipe) -> None:
         try:
-            query = request.query
-            session_id = request.session_id
-
-            context = await self.build_context(session_id, query, **request.extraInfo)
-            messages = await assemble_messages([context.system_prompt, context.session, context.messages])
-            if not messages:
-                messages = [{"role": "user", "content": query}]
-            tools = context.tools or []
+            messages, tools = await self.build_real_messages_and_tool(request)
 
             from src.agent.abs_agent import run_llm_with_tools
 
@@ -61,6 +54,9 @@ class BasicAgent(BaseAgent):
             asyncio.create_task(_run())
         except Exception as e:
             await pipe.error(str(e))
+
+    async def history_hook(self, request: AgentRequest, messages: list[dict[str, str]]) -> Coroutine[Any, Any, None] | None:
+        pass
 
     def get_capabilities(self) -> dict:
         """返回 Agent 能力描述"""
@@ -97,14 +93,7 @@ class ToolOnlyAgent(ToolUsingAgent):
 
     async def process(self, request: AgentRequest, pipe: ProcessPipe) -> None:
         try:
-            query = request.query
-            session_id = request.session_id
-
-            context = await self.build_context(session_id, query, **request.extraInfo)
-            messages = await assemble_messages(([context.system_prompt, context.messages]))
-            if not messages:
-                messages = [{"role": "user", "content": query}]
-            tools = context.tools or []
+            messages, tools = await self.build_real_messages_and_tool(request)
 
             async def _run():
                 await self.run_with_tools(messages, tools, pipe)
@@ -148,14 +137,7 @@ class MemoryOnlyAgent(MemoryAwareAgent):
 
     async def process(self, request: AgentRequest, pipe: ProcessPipe) -> None:
         try:
-            query = request.query
-            session_id = request.session_id
-
-            context = await self.build_context(session_id, query, **request.extraInfo)
-            messages = await assemble_messages(([context.system_prompt, context.messages]))
-            if not messages:
-                messages = [{"role": "user", "content": query}]
-            tools = context.tools or []
+            messages, tools = await self.build_real_messages_and_tool(request)
 
             from src.agent.abs_agent import run_llm_with_tools
 
@@ -168,11 +150,8 @@ class MemoryOnlyAgent(MemoryAwareAgent):
                 ):
                     if event["event"] == "final_content":
                         await pipe.final_text(event["content"])
-                if request.extraInfo.get("add_memory", True) and self.memory_service:
-                    text = await pipe.final
-                    self.response_cache["query"] = query
-                    self.response_cache["response"] = {"response": text}
-                    asyncio.create_task(self.add_memory(request.session_id))
+                text = await pipe.final
+                asyncio.create_task(self.memory_hook(request, text))
 
             asyncio.create_task(_run())
         except Exception as e:
@@ -242,22 +221,12 @@ class CombinedAgent(ToolUsingAgent, MemoryAwareAgent):
 
     async def process(self, request: AgentRequest, pipe: ProcessPipe) -> None:
         try:
-            query = request.query
-            session_id = request.session_id
-
-            context = await self.build_context(session_id, query, **request.extraInfo)
-            messages = await assemble_messages(([context.system_prompt, context.messages]))
-            if not messages:
-                messages = [{"role": "user", "content": query}]
-            tools = context.tools or []
+            messages, tools = await self.build_real_messages_and_tool(request)
 
             async def _run():
                 await self.run_with_tools(messages, tools, pipe)
-                if request.extraInfo.get("add_memory", True) and self.memory_service:
-                    text = await pipe.final
-                    self.response_cache["query"] = query
-                    self.response_cache["response"] = {"response": text}
-                    asyncio.create_task(self.add_memory(request.session_id))
+                text = await pipe.final
+                asyncio.create_task(self.memory_hook(request, text))
 
             asyncio.create_task(_run())
         except Exception as e:
