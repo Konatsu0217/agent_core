@@ -1,9 +1,9 @@
 import asyncio
 from abc import ABC, abstractmethod
-from pyexpat.errors import messages
 from typing import List, Dict, Any, Optional
 
-from src.context.context_model import Context
+from src.context.context import Context
+from src.context.manager import get_context_manager
 
 
 class IContextMaker(ABC):
@@ -18,32 +18,6 @@ class IContextMaker(ABC):
     async def augment_context(self, context: Context, **kwargs) -> Context:
         """增强上下文"""
         pass
-
-    @staticmethod
-    def build_custom_message_struct(components: List[Any], **kwargs) -> List[Dict[str, Any]]:
-        """按传入顺序构建自定义上下文
-        
-        Args:
-            components: 要拼接的组件列表
-            **kwargs: 额外参数
-            
-        Returns:
-            拼接后的消息列表
-        """
-        messages = []
-
-        for component in components:
-            if isinstance(component, str) and component:
-                # 如果是字符串且非空，作为系统提示词
-                messages.append({"role": "system", "content": component})
-            elif isinstance(component, dict) and component:
-                # 如果是字典且非空，直接添加
-                messages.append(component)
-            elif isinstance(component, list):
-                # 如果是列表，直接添加整个列表
-                messages.extend(component)
-
-        return messages
 
 
 class DefaultContextMaker(IContextMaker):
@@ -92,15 +66,22 @@ class DefaultContextMaker(IContextMaker):
     
     async def build_context(self, session_id: str, user_query: str, **kwargs) -> Context:
         """构建上下文"""
-        context = Context(
-            session_id=session_id,
-            user_query=user_query,
-            messages=[],
-            tools=[],
-            memory=[],
-            session=None,
-            **kwargs
-        )
+        cm = get_context_manager()
+        agent_id = (self.agent_profile or {}).get("agent_id", "DefaultAgent")
+        context = cm.get_latest(session_id, agent_id)
+        if not context:
+            context = cm.create_context(
+                session_id=session_id,
+                agent_id=agent_id,
+                user_query=user_query,
+                messages=[],
+                tools=[],
+                memory=[],
+                session=None,
+                **kwargs
+            )
+        else:
+            context.user_query = user_query
         
         # 构建prompt和tools
         await self._build_prompt_and_tools(context, **kwargs)
@@ -142,7 +123,7 @@ class DefaultContextMaker(IContextMaker):
             tasks.append(rag_task)
         else:
             async def empty_rag_task():
-                return []
+                return None
             tasks.append(empty_rag_task())
 
         # 获取工具
@@ -169,10 +150,10 @@ class DefaultContextMaker(IContextMaker):
         try:
             results = await asyncio.wait_for(
                 asyncio.gather(*tasks, return_exceptions=True),
-                timeout=5
+                timeout=10
             )
 
-            system_prompt, rag_results, tools, session_history = results
+            system_prompt, rag_results, tools, _ = results
 
             # 处理异常
             if isinstance(system_prompt, Exception):
@@ -185,19 +166,16 @@ class DefaultContextMaker(IContextMaker):
 
             if isinstance(rag_results, Exception):
                 print(f"⚠️ MemoryService search failed: {rag_results}")
-                rag_results = []
-
-            # 分离系统提示词和消息
+                rag_results = None
 
             # 移除末尾多余的换行
             system_prompt = system_prompt.strip()
 
             # 更新上下文
             context.system_prompt = system_prompt
-            context.messages = [{"role": "user", "content": user_query}]
+            context.messages.append({"role": "user", "content": user_query})
             context.tools = tools
             context.memory = rag_results
-            context.session = session_history
 
         except asyncio.TimeoutError:
             print("❌ Timeout: Service request took too long")

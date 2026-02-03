@@ -1,15 +1,16 @@
 import json
 from abc import ABC, abstractmethod
 from enum import Enum
-from typing import Any, Dict, List, Coroutine
+from typing import Any, Dict, List, Coroutine, Optional
 
-from src.context.context_maker import IContextMaker
+from src.context.context import Context
+from src.context.manager import get_context_manager
 from src.domain.models.agent_data_models import AgentRequest
 from src.infrastructure.clients.llm_clients.llm_client_manager import static_llmClientManager
 from src.infrastructure.utils.pipe import ProcessPipe
 
 
-async def run_llm_with_tools(llm_client, messages, tools, pipe: ProcessPipe | None = None):
+async def run_llm_with_tools(llm_client, context: Context, pipe: ProcessPipe | None = None):
     buffer_delta = {"role": None, "content": []}
     tool_call_accumulator = {}
 
@@ -17,9 +18,16 @@ async def run_llm_with_tools(llm_client, messages, tools, pipe: ProcessPipe | No
     current_tool_name = None
     tool_call_id = None
 
+    messages = [{"role": "system", "content": context.system_prompt}]
+    if context.memory is not None and context.memory.strip():
+        messages.append({"role": "memory", "content": context.memory})
+    messages.extend(context.messages)
+
+    print(messages)
+
     async for raw in llm_client.chat_completion_stream(
             messages=messages,
-            tools=tools
+            tools=context.tools
     ):
         data = json.loads(raw)
         delta = data["choices"][0]["delta"]
@@ -171,10 +179,6 @@ class ServiceAwareAgent:
             print("⚠️ 服务容器未初始化")
 
 
-async def assemble_messages(*components, **kwargs) -> List[Dict[str, Any]]:
-    return IContextMaker.build_custom_message_struct(*components, **kwargs)
-
-
 class BaseAgent(IBaseAgent, ServiceAwareAgent):
     """基础 Agent 实现"""
 
@@ -186,6 +190,8 @@ class BaseAgent(IBaseAgent, ServiceAwareAgent):
         # 从agent_profile中读取backbone_llm_config，如果没有则使用默认配置
         backbone_llm_config = agent_profile.get('backbone_llm_config')
         self.backbone_llm_client = static_llmClientManager.get_client(name=name, config=backbone_llm_config)
+
+        self.context: Optional[Context] = None
         self.context_maker = None
 
     def set_context_maker(self, context_maker):
@@ -213,27 +219,18 @@ class BaseAgent(IBaseAgent, ServiceAwareAgent):
             return await self.context_maker.build_context(session_id, user_query, **kwargs)
         else:
             # 如果没有ContextMaker，返回默认Context对象
-            from src.context.context_model import Context
-            return Context(
+            ctx = get_context_manager().create_context(
                 session_id=session_id,
-                user_query=user_query,
-                messages=[{"role": "user", "content": user_query}],
-                tools=[],
-                memory=[],
-                session=None,
-                **kwargs
+                agent_id=self.agent_profile["agent_id"],
             )
+            ctx.user_query = user_query
+            return ctx
 
     async def build_real_messages_and_tool(self, request: AgentRequest):
         """构建真实的消息和工具"""
         query = request.query
         session_id = request.session_id
-        context = await self.build_context(session_id, query, **request.extraInfo)
-        messages = await assemble_messages([context.system_prompt, context.session, context.messages])
-        if not messages:
-            messages = [{"role": "user", "content": query}]
-        tools = context.tools or []
-        return messages, tools
+        self.context = await self.build_context(session_id, query, **request.extraInfo)
 
 
     def get_capabilities(self) -> dict:
@@ -262,7 +259,7 @@ class ToolUsingAgent(BaseAgent):
         """设置工具管理器"""
         self.tool_manager = tool_manager
 
-    async def run_with_tools(self, messages: list[dict[str, Any]], tools: list[dict[str, Any]], pipe: ProcessPipe | None = None) -> str:
+    async def run_with_tools(self, pipe: ProcessPipe | None = None) -> str:
         """使用工具运行"""
         MAX_STEPS = int(self.agent_profile.get("behavior").get("max_tool_calls"))  # 防死循环
 
@@ -273,8 +270,7 @@ class ToolUsingAgent(BaseAgent):
 
             async for event in run_llm_with_tools(
                     self.backbone_llm_client,
-                    messages,
-                    tools,
+                    self.context,
                     pipe
             ):
                 # ======== 工具调用 ========
@@ -326,7 +322,7 @@ class ToolUsingAgent(BaseAgent):
                         error_msg = result.get("error", "") or result.get("message", "")
                         if pipe:
                             await pipe.tool_result(call['function']['name'], False, {"error": error_msg})
-                        messages.append({
+                        self.context.messages.append({
                             "role": "user",
                             "content": f"工具调用 {call['id']} 失败：{error_msg}"
                         })
@@ -335,7 +331,7 @@ class ToolUsingAgent(BaseAgent):
                     msg = result.get("result", {}).get("data", "") or result.get("result", "")
                     if pipe:
                         await pipe.tool_result(call['function']['name'], True, msg)
-                    await self.append_tool_call(messages, call, msg, final_answer)
+                    await self.append_tool_call(self.context.messages, call, msg, final_answer)
 
                     # 注意：不要 break —— event 的流要读完
                     continue
@@ -356,6 +352,7 @@ class ToolUsingAgent(BaseAgent):
             print("无工具调用，返回最终结果")
             if pipe:
                 await pipe.final_text(final_answer or "")
+                self.context.messages.append({"role": "assistant", "content": final_answer})
             return final_answer
 
         # 超出最大循环

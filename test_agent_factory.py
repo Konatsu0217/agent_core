@@ -1,4 +1,5 @@
 import asyncio
+from time import sleep
 
 from src.agent.agent_factory import AgentFactory
 from src.coordinator.agent_coordinator import AgentCoordinator
@@ -25,7 +26,7 @@ async def test_agent_factory():
 
     # 测试处理请求
     test_request = AgentRequest(
-        query=f"把我目录下的'.env.example'文件删了",
+        query=f"使用命令行工具获取bilibili的今日热榜前十，写到txt文件里",
         session_id="test_session_123"
     )
 
@@ -53,6 +54,7 @@ async def test_agent_factory():
             pass
 
     await pipe.close()
+    await asyncio.sleep(20)
 
 
 async def approve_tool(payload, pipe, approval_id):

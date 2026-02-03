@@ -2,7 +2,8 @@ import asyncio
 from typing import Any, Dict, Coroutine
 
 from src.agent.abs_agent import ExecutionMode, BaseAgent, ToolUsingAgent, \
-    MemoryAwareAgent, assemble_messages
+    MemoryAwareAgent
+from src.context.manager import get_context_manager
 from src.domain.models import AgentRequest
 from src.infrastructure.utils.pipe import ProcessPipe
 
@@ -37,19 +38,19 @@ class BasicAgent(BaseAgent):
 
     async def process(self, request: AgentRequest, pipe: ProcessPipe) -> None:
         try:
-            messages, tools = await self.build_real_messages_and_tool(request)
+            await self.build_real_messages_and_tool(request)
 
             from src.agent.abs_agent import run_llm_with_tools
 
             async def _run():
                 async for event in run_llm_with_tools(
                         self.backbone_llm_client,
-                        messages,
-                        tools,
+                        self.context,
                         pipe
                 ):
                     if event["event"] == "final_content":
                         await pipe.final_text(event["content"])
+                    get_context_manager().snapshot(self.context, "finish one Q&A workflow")
 
             asyncio.create_task(_run())
         except Exception as e:
@@ -93,10 +94,11 @@ class ToolOnlyAgent(ToolUsingAgent):
 
     async def process(self, request: AgentRequest, pipe: ProcessPipe) -> None:
         try:
-            messages, tools = await self.build_real_messages_and_tool(request)
+            await self.build_real_messages_and_tool(request)
 
             async def _run():
-                await self.run_with_tools(messages, tools, pipe)
+                await self.run_with_tools(pipe)
+                get_context_manager().snapshot(self.context, "finish one Q&A workflow")
 
             asyncio.create_task(_run())
         except Exception as e:
@@ -137,21 +139,22 @@ class MemoryOnlyAgent(MemoryAwareAgent):
 
     async def process(self, request: AgentRequest, pipe: ProcessPipe) -> None:
         try:
-            messages, tools = await self.build_real_messages_and_tool(request)
+            await self.build_real_messages_and_tool(request)
 
             from src.agent.abs_agent import run_llm_with_tools
 
             async def _run():
                 async for event in run_llm_with_tools(
                         self.backbone_llm_client,
-                        messages,
-                        tools,
+                        self.context,
                         pipe
                 ):
                     if event["event"] == "final_content":
                         await pipe.final_text(event["content"])
                 text = await pipe.final
+                get_context_manager().snapshot(self.context, "finish one Q&A workflow")
                 asyncio.create_task(self.memory_hook(request, text))
+
 
             asyncio.create_task(_run())
         except Exception as e:
@@ -213,7 +216,7 @@ class CombinedAgent(ToolUsingAgent, MemoryAwareAgent):
                 tool_manager=tool_manager,
                 prompt_service=prompt_service
             )
-            
+
             self.set_context_maker(context_maker)
             print("✅ 上下文构建器初始化完成")
         except ImportError:
@@ -221,11 +224,12 @@ class CombinedAgent(ToolUsingAgent, MemoryAwareAgent):
 
     async def process(self, request: AgentRequest, pipe: ProcessPipe) -> None:
         try:
-            messages, tools = await self.build_real_messages_and_tool(request)
+            await self.build_real_messages_and_tool(request)
 
             async def _run():
-                await self.run_with_tools(messages, tools, pipe)
+                await self.run_with_tools(pipe)
                 text = await pipe.final
+                get_context_manager().snapshot(self.context, "finish one Q&A workflow")
                 asyncio.create_task(self.memory_hook(request, text))
 
             asyncio.create_task(_run())
