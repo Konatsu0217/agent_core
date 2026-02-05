@@ -19,8 +19,16 @@ async def run_llm_with_tools(llm_client, context: Context, pipe: ProcessPipe | N
     tool_call_id = None
 
     messages = [{"role": "system", "content": context.system_prompt}]
-    if context.memory is not None and context.memory.strip():
-        messages.append({"role": "memory", "content": context.memory})
+    memory_content = None
+    if context.memory is not None:
+        if isinstance(context.memory, dict):
+            memory_content = context.memory.get("result")
+        elif isinstance(context.memory, list):
+            memory_content = "\n".join(str(item) for item in context.memory if item)
+        else:
+            memory_content = str(context.memory)
+    if memory_content:
+        messages.append({"role": "assistant", "content": memory_content})
     messages.extend(context.messages)
 
     print(messages)
@@ -398,7 +406,8 @@ class MemoryAwareAgent(BaseAgent):
         if request.extraInfo.get("add_memory", True) and self.memory_service:
             self.response_cache["query"] = request.query
             self.response_cache["response"] = {"response": text}
-            return self.add_memory(request.session_id)
+            await self.add_memory(request.session_id)
+            return None
         return None
 
     async def add_memory(self, session_id: str) -> None:

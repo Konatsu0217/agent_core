@@ -3,7 +3,7 @@ from typing import Any, AsyncIterator, Dict, TypedDict, Literal
 
 
 class AgentEvent(TypedDict):
-    type: Literal["text_delta", "tool_call", "tool_result", "final", "error", "approval_required", "approval_decision"]
+    type: Literal["text_delta", "tool_call", "tool_result", "final", "error", "approval_required", "approval_decision", "think_delta"]
     payload: Dict[str, Any]
 
 
@@ -35,6 +35,9 @@ class ProcessPipe:
 
     async def text_delta(self, text: str) -> None:
         await self.write({"type": "text_delta", "payload": {"text": text}})
+        
+    async def think_delta(self, text: str) -> None:
+        await self.write({"type": "think_delta", "payload": {"text": text}})
 
     async def tool_call(self, name: str, arguments: Any) -> None:
         await self.write({"type": "tool_call", "payload": {"name": name, "arguments": arguments}})

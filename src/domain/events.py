@@ -23,6 +23,7 @@ class ServerEventType(str, Enum):
     AGENT_APPROVAL_REQUIRED = "approval_required"
     AGENT_APPROVAL_DECISION = "approval_decision"
     # 标准事件
+    HEARTBEAT = "heartbeat"
     FINAL = "final"
     ERROR = "error"
     USAGE = "usage"
@@ -54,10 +55,10 @@ class HeartbeatPayload:
 
 @dataclass
 class InitSessionPayload:
-    user_id: str
+    user_id: str = None
     agent_id: Optional[str] = None
     metadata: Optional[Dict[str, Any]] = None
-    config: Optional[Dict[str, Any]] = None
+    plugin_config: Optional[Dict[str, Any]] = None
 
 
 @dataclass
@@ -92,26 +93,22 @@ ClientEventPayload = Union[
 @dataclass
 class TextDeltaPayload:
     text: str
-    session_id: str
 
 
 @dataclass
 class ThinkDeltaPayload:
     text: str
-    session_id: str
 
 
 @dataclass
 class ToolCallPayload:
     name: str
     arguments: Any
-    session_id: str
 
 
 @dataclass
 class ToolResultPayload:
     name: str
-    session_id: str
     success: bool
     result: Any
 
@@ -119,7 +116,6 @@ class ToolResultPayload:
 @dataclass
 class ApprovalRequiredPayload:
     approval_id: str
-    session_id: str
     name: str
     arguments: Any
     message: Optional[str] = None
@@ -129,7 +125,6 @@ class ApprovalRequiredPayload:
 @dataclass
 class ApprovalDecisionPayload:
     approval_id: str
-    session_id: str
     decision: Literal["approved", "rejected"]
     message: Optional[str] = None
 
@@ -137,13 +132,11 @@ class ApprovalDecisionPayload:
 @dataclass
 class FinalPayload:
     text: str
-    session_id: str
     structured: Optional[Dict[str, Any]] = None
 
 
 @dataclass
 class ErrorPayload:
-    session_id: str
     code: Optional[str]
     message: str
     recoverable: Optional[bool] = None
@@ -152,7 +145,6 @@ class ErrorPayload:
 
 @dataclass
 class UsagePayload:
-    session_id: str
     prompt_tokens: Optional[int] = None
     completion_tokens: Optional[int] = None
     cost: Optional[float] = None
@@ -160,7 +152,7 @@ class UsagePayload:
 
 @dataclass
 class StatePayload:
-    session_id: str
+    state: str = None
     phase: Optional[str] = None
     progress: Optional[float] = None
 
@@ -180,7 +172,7 @@ ServiceEventPayload = Union[
 
 
 @dataclass
-class UpEventEnvelope:
+class ClientEventEnvelope:
     event_id: str
     session_id: str
     type: ClientEventType
@@ -192,7 +184,7 @@ class UpEventEnvelope:
 
 
 @dataclass
-class DownEventEnvelope:
+class ServiceEventEnvelope:
     event_id: str
     session_id: str
     type: ServerEventType
@@ -203,4 +195,4 @@ class DownEventEnvelope:
     version: str = "1.0"
 
 
-EventEnvelope = Union[ClientEventPayload, ServiceEventPayload]
+EventEnvelope = Union[ClientEventEnvelope, ServiceEventEnvelope]

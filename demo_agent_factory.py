@@ -2,13 +2,31 @@ import asyncio
 
 from src.agent.agent_factory import AgentFactory
 from src.coordinator.agent_coordinator import AgentCoordinator
+from src.di.services.impl.mem0_memory_service import Mem0MemoryService
 from src.domain.agent_data_models import AgentRequest
 from src.infrastructure.utils.pipe import ProcessPipe
 
 
-async def test_agent_factory():
+async def agent_factory():
     """测试 AgentFactory 创建不同类型的 Agent"""
     coordinator = AgentCoordinator()
+
+    # 初始化服务容器
+    from src.di.container import get_service_container
+    from src.di.services.impl.default_query_wrapper_service import DefaultQueryWrapper
+    from src.di.services.impl.mcp_tool_manager import McpToolManager
+    from src.di.services.impl.pe_prompt_service import PePromptService
+    from src.di.services.impl.default_session_service import DefaultSessionService
+
+    # 获取服务容器
+    container = get_service_container()
+    # 注册服务
+    container.register("query_wrapper", DefaultQueryWrapper())
+    container.register("tool_manager", McpToolManager())
+    container.register("memory_service", Mem0MemoryService())
+    container.register("prompt_service", PePromptService())
+    container.register("session_service", DefaultSessionService())
+    print("✅ 所有服务注册完成")
 
     print("=== 测试 1: 创建基础Fast Agent===")
     basic_agent = await AgentFactory.get_basic_agent()
@@ -25,12 +43,12 @@ async def test_agent_factory():
 
     # 测试处理请求
     test_request = AgentRequest(
-        query=f"使用命令行工具获取bilibili的今日热榜前十，写到txt文件里",
+        query=f"我喜欢喝冰咖啡",
         session_id="test_session_123"
     )
 
     pipe = ProcessPipe()
-    await coordinator.process_request(test_request, pipe)
+    await coordinator.process(test_request, pipe)
 
     collected = []
     async for event in pipe.reader():
@@ -53,7 +71,13 @@ async def test_agent_factory():
             pass
 
     await pipe.close()
-    await asyncio.sleep(20)
+    await asyncio.create_task(check_not_dead())
+
+
+async def check_not_dead():
+    for i in range(30):
+        await asyncio.sleep(1)
+        print(f"检查第{i}次")
 
 
 async def approve_tool(payload, pipe, approval_id):
@@ -75,4 +99,4 @@ async def approve_tool(payload, pipe, approval_id):
 
 
 if __name__ == "__main__":
-    asyncio.run(test_agent_factory())
+    asyncio.run(agent_factory())

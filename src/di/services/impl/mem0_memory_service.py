@@ -9,14 +9,6 @@ try:
 except ImportError:
     has_mem0 = False
     print("⚠️ mem0 模块未安装，将使用模拟实现")
-    
-    # 模拟 MemoryManager 类
-    class MemoryManager:
-        async def search(self, **kwargs):
-            return []
-        
-        def add(self, messages, user_id):
-            pass
 
 
 class Mem0MemoryService(IMemoryService):
@@ -36,10 +28,4 @@ class Mem0MemoryService(IMemoryService):
     
     async def add(self, messages: List[Dict[str, Any]], user_id: str) -> None:
         """添加记忆"""
-        loop = asyncio.get_running_loop()
-        await loop.run_in_executor(
-            None,  # 默认 ThreadPoolExecutor
-            self.mem.add,
-            messages,
-            user_id
-        )
+        await asyncio.to_thread(self.mem.add, messages, user_id)

@@ -60,6 +60,49 @@ class SQLiteStorage:
             finally:
                 cur.close()
 
+    def delete_by_key(self, key: str) -> int:
+        with self._lock:
+            with self._conn:
+                cur = self._conn.execute(
+                    "DELETE FROM contexts WHERE key=?",
+                    (key,),
+                )
+                return cur.rowcount
+
+    def delete_by_prefix(self, key_prefix: str) -> int:
+        with self._lock:
+            with self._conn:
+                cur = self._conn.execute(
+                    "DELETE FROM contexts WHERE key LIKE ?",
+                    (f"{key_prefix}%",),
+                )
+                return cur.rowcount
+
+    def delete_by_version_range(
+        self,
+        key: str,
+        min_version: Optional[int] = None,
+        max_version: Optional[int] = None,
+    ) -> int:
+        if min_version is None and max_version is None:
+            return 0
+        clauses = ["key=?"]
+        params = [key]
+        if min_version is not None:
+            clauses.append("version>=?")
+            params.append(min_version)
+        if max_version is not None:
+            clauses.append("version<=?")
+            params.append(max_version)
+        where_sql = " AND ".join(clauses)
+        with self._lock:
+            with self._conn:
+                cur = self._conn.execute(
+                    f"DELETE FROM contexts WHERE {where_sql}",
+                    tuple(params),
+                )
+                return cur.rowcount
+
     def close(self):
         try:
             self._conn.close()

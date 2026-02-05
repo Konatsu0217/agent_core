@@ -1,14 +1,18 @@
 from typing import Dict, Any
+
+from typing_extensions import deprecated
+
 from src.di.services.interfaces.session_service import ISessionService
 from src.infrastructure.clients.session_manager import get_session_manager
 
 
+@deprecated("DefaultSessionService is deprecated, please use SessionManager instead")
 class DefaultSessionService(ISessionService):
     """默认会话服务"""
-    
+
     def __init__(self):
         self.session_manager = get_session_manager()
-    
+
     async def get_session(self, session_id: str, agent_name: str) -> Dict[str, Any]:
         """获取会话信息"""
         try:

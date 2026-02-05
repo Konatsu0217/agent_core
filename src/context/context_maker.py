@@ -1,6 +1,9 @@
 import asyncio
+import json
 from abc import ABC, abstractmethod
 from typing import List, Dict, Any, Optional
+
+from sqlalchemy.util import deprecated
 
 from src.context.context import Context
 from src.context.manager import get_context_manager
@@ -18,6 +21,9 @@ class IContextMaker(ABC):
     async def augment_context(self, context: Context, **kwargs) -> Context:
         """增强上下文"""
         pass
+
+    async def delete_context(self, session_id: str, agent_id: Optional[str] = None) -> int:
+        raise NotImplementedError()
 
 
 class DefaultContextMaker(IContextMaker):
@@ -187,3 +193,9 @@ class DefaultContextMaker(IContextMaker):
         for augmenter in self.augmenters:
             context = await augmenter.augment(context, **kwargs)
         return context
+
+    async def delete_context(self, session_id: str, agent_id: Optional[str] = None) -> int:
+        cm = get_context_manager()
+        if agent_id:
+            return cm.delete_history(session_id, agent_id)
+        return cm.clear_session(session_id)
