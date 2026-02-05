@@ -1,6 +1,6 @@
 import asyncio
 from typing import List, Dict, Any
-from src.services.interfaces.memory_service import IMemoryService
+from src.di.services.interfaces.memory_service import IMemoryService
 
 # 尝试导入 MemoryManager，如果失败则使用模拟实现
 try:

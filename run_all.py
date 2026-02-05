@@ -3,9 +3,8 @@ import os
 import shutil
 import subprocess
 import time
-import traceback
 from pathlib import Path
-from src.shared.logging.logger import get_logger
+from src.infrastructure.logging.logger import get_logger
 
 
 async def run_all():

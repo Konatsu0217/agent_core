@@ -1,7 +1,7 @@
-from typing import Dict, Optional, List, Any, Coroutine
+from typing import Dict, Optional, Any
 
 from src.agent import BaseAgent
-from src.domain.models.agent_data_models import AgentRequest, AgentResponse
+from src.domain.agent_data_models import AgentRequest
 from src.infrastructure.utils.pipe import ProcessPipe
 
 
@@ -18,10 +18,10 @@ class AgentCoordinator:
         self.task_dispatcher: Optional[TaskDispatcher] = None
         # 初始化服务容器
         from src.di.container import get_service_container
-        from src.services.impl.default_query_wrapper_service import DefaultQueryWrapper
-        from src.services.impl.mcp_tool_manager import McpToolManager
-        from src.services.impl.pe_prompt_service import PePromptService
-        from src.services.impl.default_session_service import DefaultSessionService
+        from src.di.services.impl.default_query_wrapper_service import DefaultQueryWrapper
+        from src.di.services.impl.mcp_tool_manager import McpToolManager
+        from src.di.services.impl.pe_prompt_service import PePromptService
+        from src.di.services.impl.default_session_service import DefaultSessionService
 
         # 获取服务容器
         container = get_service_container()

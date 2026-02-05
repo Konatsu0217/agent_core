@@ -1,5 +1,5 @@
 from typing import Optional, Any, Dict
-from src.services.interfaces.query_wrapper import IQueryWrapper
+from src.di.services.interfaces.query_wrapper import IQueryWrapper
 
 
 class DefaultQueryWrapper(IQueryWrapper):

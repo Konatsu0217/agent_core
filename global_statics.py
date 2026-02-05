@@ -3,8 +3,8 @@ import json
 from event_bus import EventBus
 
 from tools.tts.stream_audio_player import StreamingAudioPlayer
-from src.shared.config.config_manager import ConfigManager
-from src.shared.logging.logger import get_logger
+from src.infrastructure.config.config_manager import ConfigManager
+from src.infrastructure.logging.logger import get_logger
 from tools.tts.tts_engines import EdgeTTSEngine, CustomTTSEngine, GSVEngine, OpenAITTSEngine
 
 # 配置常量

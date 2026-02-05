@@ -5,8 +5,8 @@ import json
 import os
 from pathlib import Path
 from typing import Dict, Any, Optional
-from src.shared.config.config_schemas import CoreConfig
-from src.shared.logging.logger import get_logger
+from src.infrastructure.config.config_schemas import CoreConfig
+from src.infrastructure.logging.logger import get_logger
 
 
 class ConfigManager:

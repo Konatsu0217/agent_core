@@ -1,9 +1,8 @@
 import asyncio
-from time import sleep
 
 from src.agent.agent_factory import AgentFactory
 from src.coordinator.agent_coordinator import AgentCoordinator
-from src.domain.models.agent_data_models import AgentRequest
+from src.domain.agent_data_models import AgentRequest
 from src.infrastructure.utils.pipe import ProcessPipe
 
 

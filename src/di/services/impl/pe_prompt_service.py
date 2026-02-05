@@ -1,8 +1,5 @@
 from typing import Dict, Any, Optional
-import uuid
-from src.services.interfaces.prompt_service import IPromptService
-from src.infrastructure.clients.pe_client import PEClient
-from global_statics import global_config
+from src.di.services.interfaces.prompt_service import IPromptService
 from tools.prompt_server import PromptBaker
 
 

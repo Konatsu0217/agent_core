@@ -1,5 +1,5 @@
 from typing import List, Dict, Any, Optional
-from src.services.interfaces.tool_manager import IToolManager
+from src.di.services.interfaces.tool_manager import IToolManager
 from src.infrastructure.clients.mcp_client import MCPHubClient
 from global_statics import global_config
 import asyncio

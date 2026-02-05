@@ -1,3 +1,4 @@
+import enum
 import uuid
 from typing import Any, Optional
 
@@ -8,6 +9,7 @@ class AgentRequest(BaseModel):
     query: str
     extraInfo: dict = Field(default_factory=dict)
     session_id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+
 
 class AgentResponse(BaseModel):
     pure_text: str

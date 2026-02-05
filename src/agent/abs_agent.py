@@ -1,11 +1,11 @@
 import json
 from abc import ABC, abstractmethod
 from enum import Enum
-from typing import Any, Dict, List, Coroutine, Optional
+from typing import Any, Dict, Coroutine, Optional
 
 from src.context.context import Context
 from src.context.manager import get_context_manager
-from src.domain.models.agent_data_models import AgentRequest
+from src.domain.agent_data_models import AgentRequest
 from src.infrastructure.clients.llm_clients.llm_client_manager import static_llmClientManager
 from src.infrastructure.utils.pipe import ProcessPipe
 

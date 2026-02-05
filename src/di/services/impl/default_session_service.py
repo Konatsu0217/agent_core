@@ -1,5 +1,5 @@
 from typing import Dict, Any
-from src.services.interfaces.session_service import ISessionService
+from src.di.services.interfaces.session_service import ISessionService
 from src.infrastructure.clients.session_manager import get_session_manager
 
 

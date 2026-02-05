@@ -4,7 +4,7 @@ from typing import Any, Dict, Coroutine
 from src.agent.abs_agent import ExecutionMode, BaseAgent, ToolUsingAgent, \
     MemoryAwareAgent
 from src.context.manager import get_context_manager
-from src.domain.models import AgentRequest
+from src.domain.agent_data_models import AgentRequest
 from src.infrastructure.utils.pipe import ProcessPipe
 
 
