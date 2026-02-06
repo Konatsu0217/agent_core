@@ -1,6 +1,9 @@
 from typing import Dict, Any, Optional
 from src.di.services.interfaces.prompt_service import IPromptService
 from tools.prompt_server import PromptBaker
+from src.infrastructure.logging.logger import get_logger
+
+logger = get_logger()
 
 
 class PePromptService(IPromptService):
@@ -13,9 +16,9 @@ class PePromptService(IPromptService):
         """初始化提示词服务"""
         try:
             self.pe_baker = PromptBaker()
-            print("✅ PE_Baker实例初始化完毕")
+            logger.info("PE_Baker实例初始化完毕")
         except Exception as e:
-            print(f"❌ PE_Baker实例初始化失败 {e}")
+            logger.exception(f"PE_Baker实例初始化失败 {e}")
     
     async def build_prompt(self, session_id: str, agent_profile:Dict[str,Any], **kwargs) -> Dict[str, Any]:
         """构建提示词"""

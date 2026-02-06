@@ -1,4 +1,7 @@
 from tools.motion_drive.momask_bvh_vrma_flow import from_text_to_vrma
+from src.infrastructure.logging.logger import get_logger
+
+logger = get_logger()
 
 
 class VRMAHandler:
@@ -22,4 +25,4 @@ class VRMAHandler:
 
 # Not implemented yet
 def play_select_vrma(path: str):
-    print("Not implemented yet")
+    logger.warning("Not implemented yet")

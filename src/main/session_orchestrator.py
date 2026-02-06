@@ -16,6 +16,9 @@ from src.domain.events import (
 from src.infrastructure.utils.connet_manager import get_ws_manager
 from src.infrastructure.utils.pipe import ProcessPipe, AgentEvent
 from src.main.runtime import RuntimeSession
+from src.infrastructure.logging.logger import get_logger
+
+logger = get_logger()
 
 class SessionOrchestrator:
     """会话编排器 - 只负责连接、转发、插件触发"""
@@ -37,6 +40,7 @@ class SessionOrchestrator:
     ):
         """处理客户端消息"""
         event_type = message.type
+        logger.info(f"[client] onEvent:Received session_id={session_id} event_type={event_type}")
         match event_type:
             case ClientEventType.USER_MESSAGE:
                 await self.handle_user_message(session_id, message.payload)
@@ -60,10 +64,12 @@ class SessionOrchestrator:
                 await self.handle_tool_approval(session_id, message.payload)
 
             case _:
-                print(f"未处理事件类型: {event_type}")
+                logger.warning(f"[client] onEvent:Unhandled session_id={session_id} event_type={event_type}")
 
     async def handle_session_init(self, session_id: str, payload: ClientEventPayload):
         """处理会话初始化"""
+        plugin_keys = list(payload.plugin_config.keys()) if getattr(payload, "plugin_config", None) else []
+        logger.info(f"[session] onInit:Start session_id={session_id} plugin_keys={plugin_keys}")
         session = RuntimeSession(
             session_id=session_id,
             plugin_config=payload.plugin_config,
@@ -84,13 +90,16 @@ class SessionOrchestrator:
                 progress=0.0
             )
         ))
+        logger.info(f"[session] onInit:Done session_id={session_id}")
 
     async def handle_attach_session(self, session_id: str, payload: ClientEventPayload):
         """处理会话连接"""
+        logger.info(f"[session] onAttach:Start session_id={session_id}")
         if session_id not in self.active_sessions:
             # 尝试恢复会话或新建会话
             session = RuntimeSession(session_id=session_id)
             self.active_sessions[session_id] = session
+            logger.info(f"[session] onCreate:Done session_id={session_id} reason=attach")
         
         # 发送当前状态
         await self._send_event(session_id, ServiceEventEnvelope(
@@ -104,9 +113,11 @@ class SessionOrchestrator:
                 progress=0.0
             )
         ))
+        logger.info(f"[session] onAttach:Done session_id={session_id}")
 
     async def handle_detach_session(self, session_id: str, payload: ClientEventPayload):
         """处理会话断开"""
+        logger.info(f"[session] onDetach:Start session_id={session_id}")
         if session_id in self.active_sessions:
             await self._send_event(session_id, ServiceEventEnvelope(
                 session_id=session_id,
@@ -122,9 +133,13 @@ class SessionOrchestrator:
             session = self.active_sessions[session_id]
             session.release()
             del self.active_sessions[session_id]
+            logger.info(f"[session] onDetach:Done session_id={session_id}")
+        else:
+            logger.warning(f"[session] onDetach:Missing session_id={session_id}")
 
     async def handle_delete_session(self, session_id: str, payload: ClientEventPayload):
         """处理会话删除"""
+        logger.info(f"[session] onDelete:Start session_id={session_id}")
         if session_id in self.active_sessions:
             session = self.active_sessions[session_id]
             session.delete()
@@ -143,11 +158,15 @@ class SessionOrchestrator:
                         progress=1.0
                     )
                 ))
+                logger.info(f"[session] onDelete:Done session_id={session_id}")
             except Exception:
                 pass
+        else:
+            logger.warning(f"[session] onDelete:Missing session_id={session_id}")
 
     async def handle_heartbeat(self, session_id: str, payload: ClientEventPayload):
         """处理心跳"""
+        logger.info(f"[session] onHeartbeat:Received session_id={session_id} client_time={getattr(payload, 'client_time', None)}")
         await self._send_event(session_id, ServiceEventEnvelope(
             session_id=session_id,
             event_id=str(uuid.uuid4()),
@@ -162,6 +181,9 @@ class SessionOrchestrator:
     async def handle_tool_approval(self, session_id: str, payload: ClientEventPayload):
         """处理工具审批"""
         if isinstance(payload, ToolApprovalPayload):
+            logger.info(
+                f"[msg] onTool:Received session_id={session_id} approval_id={payload.approval_id} decision={payload.decision}"
+            )
             await self._handle_approval_decision(session_id, payload)
 
     async def handle_user_message(
@@ -176,9 +198,13 @@ class SessionOrchestrator:
         if not session:
             session = RuntimeSession(session_id=session_id)
             self.active_sessions[session_id] = session
+            logger.info(f"[session] onCreate:Done session_id={session_id} reason=user_message")
 
         # 1. 生成 request_id
         request_id = self._generate_request_id()
+        logger.info(
+            f"[msg] onUserMsg session_id={session_id} request_id={request_id} text_len={len(getattr(payload, 'text', '') or '')}"
+        )
 
         # 2. 创建 ProcessPipe
         pipe = self.active_sessions[session_id].createPipe()
@@ -194,21 +220,32 @@ class SessionOrchestrator:
         # 4. 启动两个并发任务
         await asyncio.gather(
             # 任务 A: 调用工作流引擎
-            self._run_workflow(request, pipe, None),
+            self._run_workflow(request, pipe, None, request_id),
             # 任务 B: 消费 pipe 事件并转发
             self._consume_and_forward(session, request_id, pipe)
         )
+        logger.info(f"[msg] onUserMsg session_id={session_id} request_id={request_id}")
 
     async def _run_workflow(
             self,
             request: AgentRequest,
             pipe: ProcessPipe,
-            agent_name: Optional[str]
+            agent_name: Optional[str],
+            request_id: str
     ):
         """调用工作流引擎"""
         try:
+            logger.info(
+                f"[flow] onEvent:Start session_id={request.session_id} request_id={request_id} agent_name={agent_name}"
+            )
             await self.engine.process(request, pipe, agent_name)
+            logger.info(
+                f"[flow] onEvent:Done session_id={request.session_id} request_id={request_id} agent_name={agent_name}"
+            )
         except Exception as e:
+            logger.exception(
+                f"[flow] onEvent:Failed session_id={request.session_id} request_id={request_id} agent_name={agent_name} error={e}"
+            )
             await pipe.error(f"工作流执行失败: {str(e)}")
 
     async def _consume_and_forward(
@@ -225,6 +262,8 @@ class SessionOrchestrator:
         2. 发布到内部事件总线 (EventBus)
         """
         session.buffer = []
+        session.sendBuffer = []
+        logger.info(f"[pipe] onConsume:Start session_id={session.session_id} request_id={request_id}")
 
         async for event in pipe.reader():
             event_type = self._map_to_ws_event_type(event["type"])
@@ -234,7 +273,6 @@ class SessionOrchestrator:
             if event["type"] == "text_delta":
                 chunk = event["payload"].get("text", "")
                 session.buffer.append(chunk)
-                print(f"\033[31m{chunk}\033[0m", end="", flush=True)
                 event_payload = TextDeltaPayload(text=chunk)
                 
             elif event["type"] == "think_delta":
@@ -285,6 +323,18 @@ class SessionOrchestrator:
                     detail=event["payload"].get("detail")
                 )
             
+            if event["type"] in {
+                "tool_call",
+                "tool_result",
+                "approval_required",
+                "approval_decision",
+                "final",
+                "error"
+            }:
+                logger.info(
+                    f"[pipe] onEvent:\"{event['type']}\" session_id={session.session_id} request_id={request_id}"
+                )
+
             if event_payload:
                 # 发送到客户端
                 await self._send_event(session.session_id, ServiceEventEnvelope(
@@ -307,6 +357,7 @@ class SessionOrchestrator:
                         "event": event
                     }
                 )
+        logger.info(f"[pipe] onConsume:Done session_id={session.session_id} request_id={request_id}")
 
     async def _handle_approval_decision(
             self,
@@ -316,17 +367,19 @@ class SessionOrchestrator:
         """处理审批决策"""
         session = self.active_sessions.get(session_id)
         if not session:
+            logger.warning(f"[msg] onApproval:Missing session_id={session_id} approval_id={message.approval_id}")
             return
 
         approval_id = message.approval_id
         pipe = session.pipe
 
         if pipe:
+            logger.info(f"[msg] onApproval:{message.decision} session_id={session_id} approval_id={approval_id}")
             # 回传决策给 pipe
             await pipe.approval_decision(
                 approval_id=approval_id,
-                approved=message.decision,
-                reason=message.message
+                decision=message.decision,
+                message=message.message
             )
             # # 清理(需要吗，这里会不会阻塞其他会话？）
             # del session.pending_approvals[approval_id]
@@ -363,8 +416,18 @@ class SessionOrchestrator:
     async def _send_event(self, session_id: str, envelope: ServiceEventEnvelope):
         """发送事件到客户端，处理序列化"""
         try:
+            if envelope.type in {
+                ServerEventType.STATE,
+                ServerEventType.FINAL,
+                ServerEventType.ERROR,
+                ServerEventType.AGENT_APPROVAL_REQUIRED,
+                ServerEventType.AGENT_APPROVAL_DECISION
+            }:
+                logger.info(
+                    f"[ws] onSend:Event session_id={session_id} event_type={envelope.type} event_id={envelope.event_id}"
+                )
             # 转换为 dict 以便 JSON 序列化
             data = dataclasses.asdict(envelope)
             await self.ws.send_event_to(session_id, data)
         except Exception as e:
-            print(f"发送消息失败: {e}")
+            logger.exception(f"[ws] onSend:Failed session_id={session_id} error={e}")

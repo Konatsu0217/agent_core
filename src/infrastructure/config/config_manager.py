@@ -18,6 +18,7 @@ class ConfigManager:
     def load_config(cls, config_path: Optional[str] = None):
         """加载配置文件"""
         try:
+            project_root = Path(__file__).resolve().parents[3]
             # 允许通过环境变量指定配置文件路径
             env_path = os.getenv('CORE_CONFIG_FILE')
             candidates = []
@@ -28,9 +29,9 @@ class ConfigManager:
             # 常见路径候选（相对/项目根）
             candidates.extend([
                 Path('config/core.json'),
-                Path(__file__).resolve().parents[1] / 'config' / 'core.json',
+                project_root / 'config' / 'core.json',
                 Path('core_config.json'),
-                Path(__file__).resolve().parents[1] / 'core_config.json',
+                project_root / 'core_config.json',
             ])
 
             config_data = None
@@ -85,9 +86,9 @@ class ConfigManager:
                 else:
                     for kp in [
                         Path('config/api.key'),
-                        Path(__file__).resolve().parents[1] / 'config' / 'api.key',
+                        project_root / 'config' / 'api.key',
                         Path('api.key'),
-                        Path(__file__).resolve().parents[1] / 'api.key',
+                        project_root / 'api.key',
                     ]:
                         try:
                             if kp.exists():
@@ -153,9 +154,9 @@ class ConfigManager:
                 else:
                     for kp in [
                         Path('config/api.key'),
-                        Path(__file__).resolve().parents[1] / 'config' / 'api.key',
+                        project_root / 'config' / 'api.key',
                         Path('api.key'),
-                        Path(__file__).resolve().parents[1] / 'api.key',
+                        project_root / 'api.key',
                     ]:
                         try:
                             if kp.exists():

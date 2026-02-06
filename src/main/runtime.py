@@ -1,10 +1,13 @@
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Dict, Any
+from typing import Dict, Any, Optional
 
 from src.context.manager import get_context_manager
 from src.infrastructure.utils.connet_manager import get_ws_manager
 from src.infrastructure.utils.pipe import ProcessPipe
+from src.infrastructure.logging.logger import get_logger
+
+logger = get_logger()
 
 
 class RuntimeSession:
@@ -13,7 +16,7 @@ class RuntimeSession:
         self.ws = get_ws_manager()
         self.created_at = datetime.now()
 
-        self.pipe = ProcessPipe()
+        self.pipe: Optional[ProcessPipe] = None
 
         # 会话的配置
         self.RuntimeSessionConfig = plugin_config
@@ -23,17 +26,23 @@ class RuntimeSession:
 
         # 缓冲区
         self.buffer = []
+        self.sendBuffer = []
+        logger.info(f"runtime_session_created session_id={session_id}")
 
     def createPipe(self) -> ProcessPipe:
+        self.pipe = ProcessPipe()
         return self.pipe
 
     def release(self):
+        logger.info(f"runtime_session_release session_id={self.session_id}")
         self.event_bus.unsubscribe_all()
         self.buffer = []
         self.pipe.close()
+        self.pipe = None
 
     def delete(self):
         """删除会话，完全删除不可复原"""
+        logger.info(f"runtime_session_delete session_id={self.session_id}")
         get_context_manager().clear_session(self.session_id)
         self.release()
 

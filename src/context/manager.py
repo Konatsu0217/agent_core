@@ -7,6 +7,9 @@ from typing import Dict, List, Optional, Any
 from src.context.context import Context
 from src.context.storage.in_memory import InMemoryStorage
 from src.context.storage.sqlite_storage import SQLiteStorage
+from src.infrastructure.logging.logger import get_logger
+
+logger = get_logger()
 
 
 class ContextManager:
@@ -151,7 +154,7 @@ class ContextManager:
 
 _manager = ContextManager(SQLiteStorage())
 _manager.register_post_snapshot_hook(
-    lambda ctx: print(f"Made a Snapshot of Context, estimated token: {(ctx.messages.__sizeof__() + ctx.system_prompt.__sizeof__() + ctx.tools.__sizeof__() + ctx.tools.__sizeof__())/3.5}")
+    lambda ctx: logger.info("Made a Snapshot of Context")
 )
 
 def get_context_manager() -> ContextManager:

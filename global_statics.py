@@ -9,30 +9,29 @@ from tools.tts.tts_engines import EdgeTTSEngine, CustomTTSEngine, GSVEngine, Ope
 
 # 配置常量
 TTS_CONFIG_FILE = "config/tts.json"
-eventBus = EventBus()
 
-class TTSStateTracker:
-    def __init__(self, logger):
-        self.logger = logger
-        self.tts_playing = False  # TTS是否正在播放
-
-    @eventBus.on("tts_state_change")
-    def set_tts_playing(self, playing=True):
-        """设置TTS播放状态"""
-        global can_consume
-        self.tts_playing = playing
-        can_consume = not playing  # TTS播放时不能消费弹幕
-        self.logger.info(f"🎙️ TTS状态: {'播放中' if playing else '已停止'}, 弹幕消费: {'暂停' if playing else '允许'}")
-
-    def get_status(self):
-        """获取当前状态"""
-        return {
-            "tts_playing": self.tts_playing,
-            "can_consume": not self.tts_playing
-        }
+# class TTSStateTracker:
+#     def __init__(self, logger):
+#         self.logger = logger
+#         self.tts_playing = False  # TTS是否正在播放
+#
+#     @eventBus.on("tts_state_change")
+#     def set_tts_playing(self, playing=True):
+#         """设置TTS播放状态"""
+#         global can_consume
+#         self.tts_playing = playing
+#         can_consume = not playing  # TTS播放时不能消费弹幕
+#         self.logger.info(f"🎙️ TTS状态: {'播放中' if playing else '已停止'}, 弹幕消费: {'暂停' if playing else '允许'}")
+#
+#     def get_status(self):
+#         """获取当前状态"""
+#         return {
+#             "tts_playing": self.tts_playing,
+#             "can_consume": not self.tts_playing
+#         }
 
 logger = get_logger()
-tts_state_tracker = TTSStateTracker(logger)
+# tts_state_tracker = TTSStateTracker(logger)
 
 # TTS引擎工厂
 tts_engines = {

@@ -7,6 +7,9 @@ from sqlalchemy.util import deprecated
 
 from src.context.context import Context
 from src.context.manager import get_context_manager
+from src.infrastructure.logging.logger import get_logger
+
+logger = get_logger()
 
 
 class IContextMaker(ABC):
@@ -163,15 +166,15 @@ class DefaultContextMaker(IContextMaker):
 
             # 处理异常
             if isinstance(system_prompt, Exception):
-                print(f"❌ PE build_prompt failed: {system_prompt}")
+                logger.error(f"❌ PE build_prompt failed: {system_prompt}")
                 return
 
             if isinstance(tools, Exception):
-                print(f"⚠️ ToolManager get_tools failed: {tools}")
+                logger.warning(f"⚠️ ToolManager get_tools failed: {tools}")
                 tools = []
 
             if isinstance(rag_results, Exception):
-                print(f"⚠️ MemoryService search failed: {rag_results}")
+                logger.warning(f"⚠️ MemoryService search failed: {rag_results}")
                 rag_results = None
 
             # 移除末尾多余的换行
@@ -184,9 +187,9 @@ class DefaultContextMaker(IContextMaker):
             context.memory = rag_results
 
         except asyncio.TimeoutError:
-            print("❌ Timeout: Service request took too long")
+            logger.warning("❌ Timeout: Service request took too long")
         except Exception as e:
-            print(f"❌ Unexpected error: {e}")
+            logger.exception(f"❌ Unexpected error: {e}")
     
     async def augment_context(self, context: Context, **kwargs) -> Context:
         """增强上下文"""

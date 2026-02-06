@@ -1,10 +1,13 @@
 # main.py
+import asyncio
 import json
 import time
 import uuid
+import uvicorn
 from fastapi import FastAPI, WebSocket
 from contextlib import asynccontextmanager
 
+from starlette.middleware.cors import CORSMiddleware
 from starlette.websockets import WebSocketDisconnect
 
 from src.coordinator.agent_coordinator import AgentCoordinator
@@ -20,8 +23,12 @@ from src.domain.events import (
     DetachSessionPayload,
     DeleteSessionPayload,
 )
+from src.infrastructure.config.config_manager import ConfigManager
 from src.infrastructure.utils.connet_manager import get_ws_manager
 from src.main.session_orchestrator import SessionOrchestrator
+from src.infrastructure.logging.logger import get_logger
+
+logger = get_logger()
 
 
 @asynccontextmanager
@@ -44,7 +51,7 @@ async def lifespan(app: FastAPI):
     container.register("memory_service", Mem0MemoryService())
     container.register("prompt_service", PePromptService())
     container.register("session_service", DefaultSessionService())
-    print("✅ 所有服务注册完成")
+    logger.info("所有服务注册完成")
 
     # 创建工作流引擎
     workflow_engine = AgentCoordinator()
@@ -72,7 +79,22 @@ async def lifespan(app: FastAPI):
     # await event_bus.close()
 
 
-app = FastAPI(lifespan=lifespan)
+# 创建FastAPI应用
+app = FastAPI(
+    title="Agent Core API",
+    description="Agent Core 核心服务API",
+    version="1.0.0",
+    lifespan=lifespan
+)
+
+# 配置CORS
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # 在生产环境中应该配置具体的域名
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 
 def _build_client_payload(event_type: ClientEventType, payload: dict, session_id: str):
@@ -138,11 +160,14 @@ def _parse_client_event(message: dict) -> ClientEventEnvelope:
     )
 
 
-@app.websocket("/ws")
+@app.websocket("/ws/agent")
 async def websocket_endpoint(websocket: WebSocket):
     await websocket.accept()
     orchestrator = app.state.orchestrator
     session_id = None
+    client = websocket.client
+    client_addr = f"{client.host}:{client.port}" if client else "unknown"
+    logger.info(f"ws_connected client={client_addr}")
 
     try:
         while True:
@@ -150,14 +175,57 @@ async def websocket_endpoint(websocket: WebSocket):
             message = json.loads(raw_message)
             try:
                 envelope = _parse_client_event(message)
-            except Exception:
+            except Exception as e:
+                logger.warning(f"ws_message_parse_failed client={client_addr} error={e}")
                 continue
             session_id = envelope.session_id
-            await orchestrator.handle_client_message(session_id, envelope)
+            await get_ws_manager().cache_websocket(session_id, websocket)
+            logger.info(
+                f"ws_message_received session_id={session_id} event_type={envelope.type} event_id={envelope.event_id} trace_id={envelope.trace_id}"
+            )
+            task = asyncio.create_task(orchestrator.handle_client_message(session_id, envelope))
+            task.add_done_callback(
+                lambda t, s=session_id, e=envelope: logger.error(
+                    f"ws_message_handle_failed session_id={s} event_type={e.type} event_id={e.event_id} error={t.exception()}"
+                ) if t.exception() else None
+            )
 
-    except WebSocketDisconnect:
+    except WebSocketDisconnect as e:
+        logger.info(
+            f"ws_disconnected session_id={session_id} client={client_addr} code={getattr(e, 'code', None)}"
+        )
         if session_id:
             await orchestrator.handle_detach_session(
                 session_id,
                 DetachSessionPayload(session_id=session_id),
             )
+
+
+if __name__ == "__main__":
+    # 从配置管理器获取服务器配置
+    config = ConfigManager.get_config()
+    
+    host = "0.0.0.0"
+    port = config.get('port', 38888)
+    workers = config.get('workers', 4)
+    limit_concurrency = config.get('limit_concurrency', 50)
+    backlog = config.get('backlog', 1024)
+    reload = config.get('reload', False)
+    timeout_keep_alive = config.get('timeout_keep_alive', 5)
+    
+    logger.info(f"启动FastAPI服务器在 {host}:{port}")
+    logger.info(f"WebSocket端点: ws://{host}:{port}/ws/agent")
+    logger.info(f"服务器配置: workers={workers}, limit_concurrency={limit_concurrency}, backlog={backlog}, reload={reload}")
+    
+    uvicorn.run(
+        app,
+        host=host,
+        port=port,
+        workers=workers,
+        limit_concurrency=limit_concurrency,
+        backlog=backlog,
+        reload=reload,
+        timeout_keep_alive=timeout_keep_alive,
+        log_level="info",
+        access_log=True
+    )

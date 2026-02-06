@@ -1,13 +1,41 @@
+import asyncio
 import json
 from abc import ABC, abstractmethod
 from enum import Enum
 from typing import Any, Dict, Coroutine, Optional
 
+from global_statics import logger
 from src.context.context import Context
 from src.context.manager import get_context_manager
 from src.domain.agent_data_models import AgentRequest
 from src.infrastructure.clients.llm_clients.llm_client_manager import static_llmClientManager
 from src.infrastructure.utils.pipe import ProcessPipe
+
+
+async def _log_token_estimate(messages, model_name):
+    await asyncio.to_thread(_log_token_estimate_sync, messages, model_name)
+
+
+def _log_token_estimate_sync(messages, model_name):
+    try:
+        import tiktoken
+        encoding = None
+        if model_name:
+            try:
+                encoding = tiktoken.encoding_for_model(model_name)
+            except Exception:
+                encoding = None
+        if encoding is None:
+            encoding = tiktoken.get_encoding("cl100k_base")
+    except Exception:
+        logger.info("估算token: unknown")
+        return
+    try:
+        payload = json.dumps(messages, ensure_ascii=False, separators=(",", ":"))
+    except Exception:
+        payload = str(messages)
+    tokens = len(encoding.encode(payload))
+    logger.info(f"估算token: {tokens}")
 
 
 async def run_llm_with_tools(llm_client, context: Context, pipe: ProcessPipe | None = None):
@@ -31,7 +59,7 @@ async def run_llm_with_tools(llm_client, context: Context, pipe: ProcessPipe | N
         messages.append({"role": "assistant", "content": memory_content})
     messages.extend(context.messages)
 
-    print(messages)
+    asyncio.create_task(_log_token_estimate(messages, getattr(llm_client, "model_name", None)))
 
     async for raw in llm_client.chat_completion_stream(
             messages=messages,
@@ -180,11 +208,11 @@ class ServiceAwareAgent:
                     else:
                         # 如果没有setter方法，直接设置为属性
                         setattr(self, service_name, service)
-                    print(f"✅ 从容器获取 {service_name}")
+                    logger.info(f"✅ 从容器获取 {service_name}")
                 else:
-                    print(f"⚠️ {service_name} 未注册")
+                    logger.warning(f"⚠️ {service_name} 未注册")
         except ImportError:
-            print("⚠️ 服务容器未初始化")
+            logger.warning("⚠️ 服务容器未初始化")
 
 
 class BaseAgent(IBaseAgent, ServiceAwareAgent):
@@ -272,7 +300,6 @@ class ToolUsingAgent(BaseAgent):
         MAX_STEPS = int(self.agent_profile.get("behavior").get("max_tool_calls"))  # 防死循环
 
         for _ in range(MAX_STEPS):
-            # === 启动一轮 LLM 流式输出 ===
             tool_call_found = False
             final_answer = None
 
@@ -285,7 +312,7 @@ class ToolUsingAgent(BaseAgent):
                 if event["event"] == "tool_call":
                     tool_call_found = True
                     call = event["tool_call"]
-                    print(f"❕发现工具调用: {call}")
+                    logger.info(f"❕发现工具调用: {call}")
                     if pipe:
                         await pipe.tool_call(name=call['function']['name'], arguments=call['function']['arguments'])
 
@@ -314,15 +341,15 @@ class ToolUsingAgent(BaseAgent):
                             decision = await pipe.wait_for_approval(approval_id)
                             if decision == "approved":
                                 approval_result = await self.tool_manager.approve_tool(approval_id)
-                                print(f"✅ 批准结果: {approval_result}")
+                                logger.info(f"✅ 批准结果: {approval_result}")
                                 result = approval_result
                             else:
                                 rejection_result = await self.tool_manager.reject_tool(approval_id)
-                                print(f"❌ 拒绝结果: {rejection_result}")
+                                logger.warning(f"❌ 拒绝结果: {rejection_result}")
                                 result = rejection_result
                         else:
                             rejection_result = await self.tool_manager.reject_tool(approval_id)
-                            print(f"❌ 拒绝结果: {rejection_result}")
+                            logger.warning(f"❌ 拒绝结果: {rejection_result}")
                             result = rejection_result
 
                     # 3. 将工具结果加入 messages
@@ -353,17 +380,18 @@ class ToolUsingAgent(BaseAgent):
             # ========= 一轮流结束后 =========
             if tool_call_found:
                 # 有工具调用 → 开启下一轮 LLM 运行
-                print("检测到工具调用，进入下一轮")
+                logger.info("检测到工具调用，进入下一轮")
                 continue
 
             # 没有工具调用 → 直接返回最终答案
-            print("无工具调用，返回最终结果")
+            logger.info("无工具调用，返回最终结果")
             if pipe:
                 await pipe.final_text(final_answer or "")
                 self.context.messages.append({"role": "assistant", "content": final_answer})
             return final_answer
 
         # 超出最大循环
+        await  pipe.final_text("Exceeded max ReAct steps!!" or "")
         return "{\"error\": \"Exceeded max ReAct steps\"}"
 
     @staticmethod

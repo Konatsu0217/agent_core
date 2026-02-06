@@ -6,6 +6,9 @@ from src.agent.abs_agent import ExecutionMode, BaseAgent, ToolUsingAgent, \
 from src.context.manager import get_context_manager
 from src.domain.agent_data_models import AgentRequest
 from src.infrastructure.utils.pipe import ProcessPipe
+from src.infrastructure.logging.logger import get_logger
+
+logger = get_logger()
 
 
 class BasicAgent(BaseAgent):
@@ -218,9 +221,9 @@ class CombinedAgent(ToolUsingAgent, MemoryAwareAgent):
             )
 
             self.set_context_maker(context_maker)
-            print("✅ 上下文构建器初始化完成")
+            logger.info("✅ 上下文构建器初始化完成")
         except ImportError:
-            print("⚠️ 上下文构建器未初始化")
+            logger.warning("⚠️ 上下文构建器未初始化")
 
     async def process(self, request: AgentRequest, pipe: ProcessPipe) -> None:
         try:

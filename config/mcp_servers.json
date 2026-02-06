@@ -3,28 +3,10 @@
   "_usage": "python mcp_center_server.py --config mcp_servers.json",
   "servers": [
     {
-      "name": "local",
-      "endpoint": "http://localhost:8000/mcp",
-      "enabled": true,
-      "timeout": 30
-    },
-    {
-      "name": "weather",
+      "name": "terminal-user",
       "endpoint": "http://localhost:8001/mcp",
       "enabled": true,
       "timeout": 30
-    },
-    {
-      "name": "database",
-      "endpoint": "http://localhost:8002/mcp",
-      "enabled": false,
-      "timeout": 60
-    },
-    {
-      "name": "file_system",
-      "endpoint": "http://localhost:8003/mcp",
-      "enabled": true,
-      "timeout": 45
     }
   ]
 }

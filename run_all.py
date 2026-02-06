@@ -20,21 +20,15 @@ async def run_all():
 
     state = False
     mcp_example_service = None
-    pe_service = None
     mcp_hub_service = None
     pe_service = None
     main_service = None
 
     try:
-        mcp_example_service = subprocess.Popen(["python3", "tools/mcp_hub/mcp_server/mcp_server_example.py"],
+        mcp_example_service = subprocess.Popen(["python3", "tools/mcp_hub/mcp_server/terminal_mcp_server.py"],
                                        cwd=str(BASE_DIR), env=env)
 
         logger.info("mcp_example_service 已启动")
-        time.sleep(3)
-
-        pe_service = subprocess.Popen(["python3", "tools/pe_server/run.py"], cwd=str(BASE_DIR), env=env)
-
-        logger.info("pe_service 已启动")
         time.sleep(3)
 
         mcp_hub_service = subprocess.Popen(
@@ -44,54 +38,33 @@ async def run_all():
         logger.info("mcp_hub_service 已启动")
         time.sleep(3)
 
-        main_service = subprocess.Popen(["python3", "main.py"], cwd=str(BASE_DIR), env=env)
+        main_service = subprocess.Popen(["python3", "src/main/back_end.py"], cwd=str(BASE_DIR), env=env)
 
         logger.info("主服务已启动，全部启动完毕，按Ctrl+C停止")
-
-        logger.info("正在启动前端....")
-        webui_service = None
-        webui_dir = BASE_DIR / "webUI"
-        frontend_cmd = None
-        for cmd in (["npm", "run", "dev"], ["pnpm", "dev"], ["yarn", "dev"]):
-            if shutil.which(cmd[0]):
-                frontend_cmd = cmd
-                break
-        if frontend_cmd is None:
-            raise RuntimeError("未找到可用的包管理器：npm/pnpm/yarn")
-        webui_service = subprocess.Popen(frontend_cmd, cwd=str(webui_dir), env=env)
-        time.sleep(2)
-        logger.info("webUI 已启动: http://localhost:5174/ (如果端口被占用会自动切换)")
         state = True
+
 
     except Exception as e:
         logger.exception("服务启动失败")
+        state = False
 
     if state:
         try:
             # 等待进程结束，或者我们可以做其他事情
             main_service.wait()
-            pe_service.wait()
             mcp_hub_service.wait()
             mcp_example_service.wait()
-            webui_service.wait()
         except KeyboardInterrupt:
             logger.info("正在停止服务...")
             if main_service and main_service.poll() is None:
                 main_service.terminate()
-            if pe_service and pe_service.poll() is None:
-                pe_service.terminate()
             if mcp_hub_service and mcp_hub_service.poll() is None:
                 mcp_hub_service.terminate()
             if mcp_example_service and mcp_example_service.poll() is None:
                 mcp_example_service.terminate()
-            if webui_service and webui_service.poll() is None:
-                webui_service.terminate()
             main_service.wait()
-            pe_service.wait()
             mcp_hub_service.wait()
             mcp_example_service.wait()
-            if webui_service:
-                webui_service.wait()
             logger.info("服务已停止")
 
 if __name__ == "__main__":

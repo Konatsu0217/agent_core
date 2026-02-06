@@ -2,9 +2,11 @@ from typing import List, Dict, Any, Optional
 from src.di.services.interfaces.tool_manager import IToolManager
 from src.infrastructure.clients.mcp_client import MCPHubClient
 from global_statics import global_config
+from src.infrastructure.logging.logger import get_logger
 import asyncio
 import uuid
 
+logger = get_logger()
 
 class McpToolManager(IToolManager):
     """基于 MCP 的工具管理器"""
@@ -20,9 +22,9 @@ class McpToolManager(IToolManager):
         try:
             tools = await self.mcpClient.get_tools()
             self.tool_cache = tools
-            print(f"✅ MCPHubClient 发现 {len(tools)} 个工具")
+            logger.info(f"MCPHubClient 发现 {len(tools)} 个工具")
         except Exception as e:
-            print(f"⚠️ MCPHubClient get_tools failed: {e}")
+            logger.warning(f"MCPHubClient get_tools failed: {e}")
             self.tool_cache = []
     
     async def get_tools(self) -> List[Dict[str, Any]]:

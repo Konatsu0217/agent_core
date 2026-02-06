@@ -5,6 +5,8 @@ from typing import AsyncGenerator
 import global_statics
 from tools.tts.function_call_way import generate_tts_audio
 
+logger = global_statics.logger
+
 class TTSHandler:
     def __init__(self):
         self.name = "tts_handler"
@@ -45,7 +47,7 @@ class TTSHandler:
 
             # 等待播放线程启动
             await asyncio.sleep(0.5)
-            print(f"📡 开始请求TTS音频流... time = {time.time()}")
+            logger.info(f"📡 开始请求TTS音频流... time = {time.time()}")
             # 标记是否接收到第一个音频包
             first_chunk_received = False
             chunk_count = 0
@@ -62,7 +64,7 @@ class TTSHandler:
                     if not first_chunk_received:
                         first_chunk_received = True
                         first_chunk_time = time.time() - start_time
-                        print(f"🎵 接收到第一个音频包: {len(chunk)} bytes (耗时 {first_chunk_time:.2f}s)")
+                        logger.info(f"🎵 接收到第一个音频包: {len(chunk)} bytes (耗时 {first_chunk_time:.2f}s)")
 
                     # 按顺序添加音频数据到播放队列
                     player.add_audio_chunk(chunk)
@@ -73,30 +75,24 @@ class TTSHandler:
 
             # 检查是否接收到音频数据
             if not first_chunk_received:
-                print("❌ 未接收到任何音频数据")
+                logger.warning("未接收到任何音频数据")
                 player.stop_playback()
                 return False
 
             # 标记接收完成
             player.stop_receiving()
 
-            print(f"\n📊 接收完成:")
-            print(f"  - 总大小: {total_bytes / 1024:.1f} KB")
-            print(f"  - 音频块数: {chunk_count}")
-            print(f"  - 播放队列: {player.audio_queue.qsize()} 块待播放")
-            print(f"  - 总耗时: {time.time() - start_time:.2f}s")
+            logger.info(f"📊 接收完成: 总大小={total_bytes / 1024:.1f}KB, 音频块数={chunk_count}, 播放队列={player.audio_queue.qsize()} 块待播放, 总耗时={time.time() - start_time:.2f}s")
 
             # 等待播放完成
-            print("\n⏳ 等待播放完成...")
+            logger.info("⏳ 等待播放完成...")
             player.wait_for_completion()
 
-            print(f"播放完成")
+            logger.info("播放完成")
             return True
 
         except Exception as e:
-            print(f"❌ TTS播放失败: {e}")
-            import traceback
-            traceback.print_exc()
+            logger.exception(f"TTS播放失败: {e}")
             player.stop_playback()
             return False
 
