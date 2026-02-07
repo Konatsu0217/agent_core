@@ -2,7 +2,7 @@
 import asyncio
 import uuid
 import dataclasses
-from typing import Dict, Optional, List, Any
+from typing import Dict, Optional
 from datetime import datetime
 
 from src.coordinator.work_flow_engine import WorkflowEngine
@@ -15,7 +15,6 @@ from src.domain.events import (
 )
 from src.agent.agent_factory import AgentFactory
 from src.agent.storage.sqlite_agent_profile_storage import SQLiteAgentProfileStorage
-from src.context.manager import get_context_manager
 from src.infrastructure.utils.connet_manager import get_ws_manager
 from src.infrastructure.utils.pipe import ProcessPipe, AgentEvent
 from src.main.runtime import RuntimeSession
@@ -99,7 +98,6 @@ class SessionOrchestrator:
                 phase="initialized",
                 progress=0.0,
                 avatar_url=session.avatar_url,
-                recent_messages=self._get_recent_messages(session_id, agent_id),
             )
         ))
         logger.info(f"[session] onInit:Done session_id={session_id}")
@@ -126,7 +124,6 @@ class SessionOrchestrator:
                 phase="attached",
                 progress=0.0,
                 avatar_url=getattr(session, "avatar_url", None),
-                recent_messages=self._get_recent_messages(session_id, agent_id) if agent_id else None,
             )
         ))
         logger.info(f"[session] onAttach:Done session_id={session_id}")
@@ -447,15 +444,3 @@ class SessionOrchestrator:
             await self.ws.send_event_to(session_id, data)
         except Exception as e:
             logger.exception(f"[ws] onSend:Failed session_id={session_id} error={e}")
-
-    def _get_recent_messages(self, session_id: str, agent_id: Optional[str], rounds: int = 10) -> List[Dict[str, Any]]:
-        if not agent_id:
-            return []
-        ctx = get_context_manager().get_latest(session_id, agent_id)
-        if not ctx or not ctx.messages:
-            return []
-        max_messages = rounds * 2
-        filtered = [m for m in ctx.messages if isinstance(m, dict) and m.get("role") in {"user", "assistant"}]
-        if len(filtered) <= max_messages:
-            return filtered
-        return filtered[-max_messages:]

@@ -29,6 +29,7 @@ from src.infrastructure.config.config_manager import ConfigManager
 from src.infrastructure.utils.connet_manager import get_ws_manager
 from src.main.session_orchestrator import SessionOrchestrator
 from src.infrastructure.logging.logger import get_logger
+from src.context.manager import get_context_manager
 
 logger = get_logger()
 
@@ -115,7 +116,15 @@ async def upload_agent_profile(payload: Dict[str, Any] = Body(...)):
     if not agent_id:
         raise HTTPException(status_code=400, detail="missing_agent_id")
     storage = app.state.agent_profile_storage
-    storage.create(agent_id, agent_profile, agent_profile.get("avatar_url"))
+    existing = storage.get(agent_id)
+    if existing and existing.get("client_readable") is False:
+        raise HTTPException(status_code=403, detail="agent_profile_not_overwritable")
+    base = None
+    if existing:
+        base = {k: v for k, v in existing.items() if k != "_meta"}
+    merged = _deep_merge(base or {}, agent_profile)
+    merged = _preserve_api_keys(base, agent_profile, merged)
+    storage.create(agent_id, merged, merged.get("avatar_url"))
     return {"agent_id": agent_id, "status": "upserted"}
 
 
@@ -132,13 +141,71 @@ def _redact_profile(profile: Dict[str, Any]) -> Dict[str, Any]:
     return cleaned
 
 
+def _deep_merge(base: Any, patch: Any) -> Any:
+    if isinstance(base, dict) and isinstance(patch, dict):
+        merged = dict(base)
+        for k, v in patch.items():
+            if v is None:
+                continue
+            if k in merged and isinstance(merged.get(k), dict) and isinstance(v, dict):
+                merged[k] = _deep_merge(merged.get(k), v)
+            else:
+                merged[k] = v
+        return merged
+    return patch
+
+
+def _preserve_api_keys(existing: Dict[str, Any] | None, incoming: Dict[str, Any], merged: Dict[str, Any]) -> Dict[str, Any]:
+    existing_backbone = (existing or {}).get("backbone_llm_config")
+    incoming_backbone = incoming.get("backbone_llm_config")
+    merged_backbone = merged.get("backbone_llm_config")
+    if not isinstance(merged_backbone, dict):
+        return merged
+
+    merged_backbone = dict(merged_backbone)
+    for key in ("openapi_key", "api_key"):
+        existing_val = None
+        if isinstance(existing_backbone, dict):
+            existing_val = existing_backbone.get(key)
+        incoming_has_key = isinstance(incoming_backbone, dict) and key in incoming_backbone
+        if not incoming_has_key:
+            continue
+        incoming_val = incoming_backbone.get(key)
+        if incoming_val is None:
+            if existing_val is not None:
+                merged_backbone[key] = existing_val
+            continue
+        if isinstance(incoming_val, str) and incoming_val.strip() == "":
+            if existing_val is not None:
+                merged_backbone[key] = existing_val
+
+    merged = dict(merged)
+    merged["backbone_llm_config"] = merged_backbone
+    return merged
+
+
 @app.get("/api/agent/profile/{agent_id}")
 async def get_agent_profile(agent_id: str):
     storage = app.state.agent_profile_storage
     profile = storage.get(agent_id)
     if not profile:
         raise HTTPException(status_code=404, detail="agent_id_not_found")
+    if profile.get("client_readable") is False:
+        raise HTTPException(status_code=403, detail="agent_profile_not_readable")
     return _redact_profile(profile)
+
+
+@app.get("/api/session/{session_id}/messages")
+async def get_session_messages(session_id: str, agent_id: str, limit: int = 20):
+    if limit <= 0:
+        limit = 20
+    if limit > 200:
+        limit = 200
+    ctx = get_context_manager().get_latest(session_id, agent_id)
+    if not ctx:
+        return {"session_id": session_id, "agent_id": agent_id, "messages": []}
+    filtered = [m for m in (ctx.messages or []) if isinstance(m, dict) and m.get("role") in {"user", "assistant"}]
+    return {"session_id": session_id, "agent_id": agent_id, "messages": filtered[-limit:]}
 
 
 def _build_client_payload(event_type: ClientEventType, payload: dict, session_id: str):

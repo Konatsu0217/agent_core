@@ -39,8 +39,9 @@ class RuntimeSession:
         logger.info(f"runtime_session_release session_id={self.session_id}")
         self.event_bus.unsubscribe_all()
         self.buffer = []
-        self.pipe.close()
-        self.pipe = None
+        if self.pipe:
+            self.pipe.close()
+            self.pipe = None
 
     def delete(self):
         """删除会话，完全删除不可复原"""

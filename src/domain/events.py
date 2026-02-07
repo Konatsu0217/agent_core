@@ -156,7 +156,6 @@ class StatePayload:
     phase: Optional[str] = None
     progress: Optional[float] = None
     avatar_url: Optional[str] = None
-    recent_messages: Optional[List[Dict[str, Any]]] = None
 
 
 ServiceEventPayload = Union[
