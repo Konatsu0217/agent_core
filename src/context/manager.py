@@ -49,7 +49,7 @@ class ContextManager:
             self._record(ctx)
             for fn in self._post_snapshot_hooks:
                 try:
-                    fn(ctx)
+                    fn(note)
                 except Exception:
                     pass
         return ctx
@@ -154,7 +154,7 @@ class ContextManager:
 
 _manager = ContextManager(SQLiteStorage())
 _manager.register_post_snapshot_hook(
-    lambda ctx: logger.info("Made a Snapshot of Context")
+    lambda ctx, note: logger.info(f"Made a Snapshot of Context, note={note}")
 )
 
 def get_context_manager() -> ContextManager:

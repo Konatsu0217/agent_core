@@ -64,6 +64,7 @@ class InitSessionPayload:
 @dataclass
 class AttachSessionPayload:
     session_id: str
+    agent_id: Optional[str] = None
     metadata: Optional[Dict[str, Any]] = None
 
 
@@ -180,6 +181,7 @@ class ClientEventEnvelope:
     ts: float
     source: Literal["client", "system"]
     payload: ClientEventPayload
+    agent_id: Optional[str] = None
     trace_id: Optional[str] = None
     version: str = "1.0"
 

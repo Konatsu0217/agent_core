@@ -103,7 +103,7 @@ class OpenAIStyleLLMClient(AbsLLMClient):
             if tool_choice:
                 request_params["tool_choice"] = tool_choice
 
-            logger.info(f"发送聊天请求，模型: {model}, 消息数: {len(messages)}")
+            logger.info(f"[LLM] 发送聊天请求，模型: {model}, 消息数: {len(messages)}")
 
             # 使用 OpenAI 客户端发送请求
             response = await self.client.chat.completions.create(**request_params)
@@ -111,11 +111,11 @@ class OpenAIStyleLLMClient(AbsLLMClient):
             # 将响应转换为字典格式
             result = response.model_dump()
 
-            logger.info(f"收到响应，使用token: {result.get('usage', {})}")
+            logger.info(f"[LLM] 收到响应，使用token: {result.get('usage', {})}")
             return result
 
         except Exception as e:
-            logger.error(f"聊天请求失败: {str(e)}")
+            logger.error(f"[LLM] 聊天请求失败: {str(e)}")
             raise
 
     async def chat_completion_stream(
@@ -155,7 +155,7 @@ class OpenAIStyleLLMClient(AbsLLMClient):
             if tool_choice:
                 request_params["tool_choice"] = tool_choice
 
-            logger.info(f"发送聊天请求，模型: {model}, 消息数: {len(messages)}")
+            logger.info(f"[LLM] 发送聊天请求，模型: {model}, 消息数: {len(messages)}")
 
             # AsyncOpenAI 流式生成
             stream = await self.client.chat.completions.create(
@@ -166,7 +166,7 @@ class OpenAIStyleLLMClient(AbsLLMClient):
                 yield chunk.model_dump_json()
 
         except Exception as e:
-            logger.error(f"流式聊天请求失败: {e}")
+            logger.error(f"[LLM] 流式聊天请求失败: {str(e)}")
             raise
 
     async def close(self):

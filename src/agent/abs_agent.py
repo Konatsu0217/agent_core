@@ -35,7 +35,7 @@ def _log_token_estimate_sync(messages, model_name):
     except Exception:
         payload = str(messages)
     tokens = len(encoding.encode(payload))
-    logger.info(f"估算token: {tokens}")
+    logger.info(f"[LLM] 估算token: {tokens}")
 
 
 async def run_llm_with_tools(llm_client, context: Context, pipe: ProcessPipe | None = None):
@@ -65,6 +65,8 @@ async def run_llm_with_tools(llm_client, context: Context, pipe: ProcessPipe | N
             messages=messages,
             tools=context.tools
     ):
+        if pipe and pipe.is_closed():
+            return
         data = json.loads(raw)
         delta = data["choices"][0]["delta"]
         finish_reason = data["choices"][0]["finish_reason"]
@@ -76,11 +78,13 @@ async def run_llm_with_tools(llm_client, context: Context, pipe: ProcessPipe | N
         # ==== Content ====
         if delta.get("content"):
             buffer_delta["content"].append(delta["content"])
-            if pipe:
+            if pipe and not pipe.is_closed():
                 await pipe.text_delta(delta["content"])
 
         # ==== Tool Calls ====
         if delta.get("tool_calls"):
+            if pipe and pipe.is_closed():
+                return
             for call in delta["tool_calls"]:
                 cid = call["id"]
                 if tool_call_id is None:
@@ -108,6 +112,8 @@ async def run_llm_with_tools(llm_client, context: Context, pipe: ProcessPipe | N
                     parsed = json.loads(args)
                     # 如果成功解析 → yield 出去让外部执行
                     # messages.append(response.choices[0].message)
+                    if pipe and pipe.is_closed():
+                        return
                     yield {
                         "event": "tool_call",
                         "tool_call": {
@@ -129,6 +135,8 @@ async def run_llm_with_tools(llm_client, context: Context, pipe: ProcessPipe | N
 
         # ==== 流结束 ====
         if finish_reason:
+            if pipe and pipe.is_closed():
+                return
             yield {
                 "event": "final_content",
                 "role": buffer_delta["role"],
@@ -313,11 +321,15 @@ class ToolUsingAgent(BaseAgent):
                 if event["event"] == "tool_call":
                     tool_call_found = True
                     call = event["tool_call"]
-                    logger.info(f"❕发现工具调用: {call}")
+                    logger.info(f"[LLM] 工具调用: {call}")
+                    if pipe and pipe.is_closed():
+                        return None
                     if pipe:
                         await pipe.tool_call(name=call['function']['name'], arguments=call['function']['arguments'])
 
                     # 1. 执行工具
+                    if pipe and pipe.is_closed():
+                        return None
                     if self.tool_manager:
                         result = await self.tool_manager.call_tool(call)
                     else:
@@ -342,15 +354,15 @@ class ToolUsingAgent(BaseAgent):
                             decision = await pipe.wait_for_approval(approval_id)
                             if decision == "approved":
                                 approval_result = await self.tool_manager.approve_tool(approval_id)
-                                logger.info(f"✅ 批准结果: {approval_result}")
+                                logger.info(f"[MCP] 批准结果: {approval_result}")
                                 result = approval_result
                             else:
                                 rejection_result = await self.tool_manager.reject_tool(approval_id)
-                                logger.warning(f"❌ 拒绝结果: {rejection_result}")
+                                logger.warning(f"[MCP] 拒绝结果: {rejection_result}")
                                 result = rejection_result
                         else:
                             rejection_result = await self.tool_manager.reject_tool(approval_id)
-                            logger.warning(f"❌ 拒绝结果: {rejection_result}")
+                            logger.warning(f"[MCP] 拒绝结果: {rejection_result}")
                             result = rejection_result
 
                     # 3. 将工具结果加入 messages
@@ -358,6 +370,8 @@ class ToolUsingAgent(BaseAgent):
                         error_msg = result.get("error", "") or result.get("message", "")
                         if pipe:
                             await pipe.tool_result(call['function']['name'], False, {"error": error_msg})
+                        if pipe and pipe.is_closed():
+                            return None
                         self.context.messages.append({
                             "role": "user",
                             "content": f"工具调用 {call['id']} 失败：{error_msg}"
@@ -367,6 +381,8 @@ class ToolUsingAgent(BaseAgent):
                     msg = result.get("result", {}).get("data", "") or result.get("result", "")
                     if pipe:
                         await pipe.tool_result(call['function']['name'], True, msg)
+                    if pipe and pipe.is_closed():
+                        return None
                     await self.append_tool_call(self.context.messages, call, msg, final_answer)
 
                     # 注意：不要 break —— event 的流要读完
@@ -381,11 +397,13 @@ class ToolUsingAgent(BaseAgent):
             # ========= 一轮流结束后 =========
             if tool_call_found:
                 # 有工具调用 → 开启下一轮 LLM 运行
-                logger.info("检测到工具调用，进入下一轮")
+                logger.info("[LLM] 检测到工具调用，进入下一轮")
                 continue
 
             # 没有工具调用 → 直接返回最终答案
-            logger.info("无工具调用，返回最终结果")
+            logger.info("[LLM] 无工具调用，返回最终结果")
+            if pipe and pipe.is_closed():
+                return None
             if pipe:
                 await pipe.final_text(final_answer or "")
                 self.context.messages.append({"role": "assistant", "content": final_answer})
@@ -393,6 +411,7 @@ class ToolUsingAgent(BaseAgent):
 
         # 超出最大循环
         await  pipe.final_text("Exceeded max ReAct steps!!" or "")
+        logger.warning("[LLM] 工具调用轮次达到上限")
         return "{\"error\": \"Exceeded max ReAct steps\"}"
 
     @staticmethod

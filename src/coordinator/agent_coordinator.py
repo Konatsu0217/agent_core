@@ -21,6 +21,10 @@ class AgentCoordinator(WorkflowEngine):
     def register_agent(self, agent):
         """注册 Agent"""
         self.agents[agent.agent_id] = agent
+
+    def unregist_agent(self, agent_id: str) -> None:
+        if agent_id in self.agents:
+            del self.agents[agent_id]
     
     def get_agent(self, agent_id: str) -> Optional[Any]:
         """获取 Agent"""

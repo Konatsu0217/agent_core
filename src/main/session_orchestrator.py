@@ -46,27 +46,26 @@ class SessionOrchestrator:
         event_type = message.type
         logger.info(f"[client] onEvent:Received session_id={session_id} event_type={event_type}")
         if event_type == ClientEventType.USER_MESSAGE:
-            await self.handle_user_message(session_id, message.payload)
+            await self.handle_user_message(session_id, message.agent_id, message.payload)
         elif event_type == ClientEventType.INIT_SESSION:
-            await self.handle_session_init(session_id, message.payload)
+            await self.handle_session_init(session_id, message.agent_id, message.payload)
         elif event_type == ClientEventType.ATTACH_SESSION:
-            await self.handle_attach_session(session_id, message.payload)
+            await self.handle_attach_session(session_id, message.agent_id, message.payload)
         elif event_type == ClientEventType.DETACH_SESSION:
-            await self.handle_detach_session(session_id, message.payload)
+            await self.handle_detach_session(session_id, message.agent_id, message.payload)
         elif event_type == ClientEventType.DELETE_SESSION:
-            await self.handle_delete_session(session_id, message.payload)
+            await self.handle_delete_session(session_id, message.agent_id, message.payload)
         elif event_type == ClientEventType.HEARTBEAT:
-            await self.handle_heartbeat(session_id, message.payload)
+            await self.handle_heartbeat(session_id, message.agent_id, message.payload)
         elif event_type == ClientEventType.TOOL_APPROVAL:
-            await self.handle_tool_approval(session_id, message.payload)
+            await self.handle_tool_approval(session_id, message.agent_id, message.payload)
         else:
             logger.warning(f"[client] onEvent:Unhandled session_id={session_id} event_type={event_type}")
 
-    async def handle_session_init(self, session_id: str, payload: ClientEventPayload):
+    async def handle_session_init(self, session_id: str, agent_id: str, payload: ClientEventPayload):
         """处理会话初始化"""
         plugin_keys = list(payload.plugin_config.keys()) if getattr(payload, "plugin_config", None) else []
         logger.info(f"[session] onInit:Start session_id={session_id} plugin_keys={plugin_keys}")
-        agent_id = getattr(payload, "agent_id", None)
         if not agent_id:
             logger.warning(f"[session] onInit:Missing agent_id session_id={session_id}")
             return
@@ -102,17 +101,18 @@ class SessionOrchestrator:
         ))
         logger.info(f"[session] onInit:Done session_id={session_id}")
 
-    async def handle_attach_session(self, session_id: str, payload: ClientEventPayload):
+    async def handle_attach_session(self, session_id: str, agent_id: str, payload: ClientEventPayload):
         """处理会话连接"""
         logger.info(f"[session] onAttach:Start session_id={session_id}")
         if session_id not in self.active_sessions:
             # 尝试恢复会话或新建会话
-            session = RuntimeSession(session_id=session_id)
+            session = RuntimeSession(session_id=session_id, agent_id=agent_id or getattr(payload, "agent_id", None))
             self.active_sessions[session_id] = session
             logger.info(f"[session] onCreate:Done session_id={session_id} reason=attach")
         
         # 发送当前状态
         session = self.active_sessions[session_id]
+        await self._ensure_agent(session, agent_id or getattr(payload, "agent_id", None))
         agent_id = getattr(session, "agent_id", None)
         await self._send_event(session_id, ServiceEventEnvelope(
             session_id=session_id,
@@ -126,9 +126,9 @@ class SessionOrchestrator:
                 avatar_url=getattr(session, "avatar_url", None),
             )
         ))
-        logger.info(f"[session] onAttach:Done session_id={session_id}")
+        logger.info(f"[session] onAttach:Done session_id={session_id} and agent_id={agent_id}")
 
-    async def handle_detach_session(self, session_id: str, payload: ClientEventPayload):
+    async def handle_detach_session(self, session_id: str, agent_id: str = None, payload: ClientEventPayload = None):
         """处理会话断开"""
         logger.info(f"[session] onDetach:Start session_id={session_id}")
         if session_id in self.active_sessions:
@@ -150,7 +150,7 @@ class SessionOrchestrator:
         else:
             logger.warning(f"[session] onDetach:Missing session_id={session_id}")
 
-    async def handle_delete_session(self, session_id: str, payload: ClientEventPayload):
+    async def handle_delete_session(self, session_id: str, agent_id: str, payload: ClientEventPayload):
         """处理会话删除"""
         logger.info(f"[session] onDelete:Start session_id={session_id}")
         if session_id in self.active_sessions:
@@ -177,7 +177,7 @@ class SessionOrchestrator:
         else:
             logger.warning(f"[session] onDelete:Missing session_id={session_id}")
 
-    async def handle_heartbeat(self, session_id: str, payload: ClientEventPayload):
+    async def handle_heartbeat(self, session_id: str, agent_id: str, payload: ClientEventPayload):
         """处理心跳"""
         logger.info(f"[session] onHeartbeat:Received session_id={session_id} client_time={getattr(payload, 'client_time', None)}")
         await self._send_event(session_id, ServiceEventEnvelope(
@@ -191,7 +191,7 @@ class SessionOrchestrator:
             )
         ))
 
-    async def handle_tool_approval(self, session_id: str, payload: ClientEventPayload):
+    async def handle_tool_approval(self, session_id: str, agent_id: str, payload: ClientEventPayload):
         """处理工具审批"""
         if isinstance(payload, ToolApprovalPayload):
             logger.info(
@@ -202,6 +202,7 @@ class SessionOrchestrator:
     async def handle_user_message(
             self,
             session_id: str,
+            agent_id: str,
             payload: ClientEventPayload
     ):
         """
@@ -209,35 +210,72 @@ class SessionOrchestrator:
         """
         session = self.active_sessions.get(session_id)
         if not session:
-            session = RuntimeSession(session_id=session_id)
+            session = RuntimeSession(session_id=session_id, agent_id=agent_id or getattr(payload, "agent_id", None))
             self.active_sessions[session_id] = session
             logger.info(f"[session] onCreate:Done session_id={session_id} reason=user_message")
 
-        # 1. 生成 request_id
+        query_text = getattr(payload, 'text', '')
+        if not getattr(session, "agent_id", None):
+            metadata = getattr(payload, "metadata", None) or {}
+            agent_id = metadata.get("agent_id") if isinstance(metadata, dict) else None
+            await self._ensure_agent(session, agent_id)
+        if session.current_task and not session.current_task.done():
+            if session.pipe:
+                await session.pipe.close("request_cancelled")
+            session.current_task.cancel()
+
         request_id = self._generate_request_id()
         logger.info(
-            f"[msg] onUserMsg session_id={session_id} request_id={request_id} text_len={len(getattr(payload, 'text', '') or '')}"
+            f"[msg] onUserMsg session_id={session_id} request_id={request_id} text_len={len(query_text or '')}"
         )
 
-        # 2. 创建 ProcessPipe
-        pipe = self.active_sessions[session_id].createPipe()
+        session.current_request_id = request_id
+        session.current_task = asyncio.create_task(
+            self._run_request(session, request_id, query_text)
+        )
+        task = session.current_task
 
-        # 3. 构建标准请求
-        # UserMessagePayload 使用 text 字段
-        query_text = getattr(payload, 'text', '')
+        try:
+            await task
+        except asyncio.CancelledError:
+            logger.info(f"[msg] onUserMsg cancelled session_id={session_id} request_id={request_id}")
+            return
+        logger.info(f"[msg] onUserMsg session_id={session_id} request_id={request_id}")
+
+    async def _run_request(
+            self,
+            session: RuntimeSession,
+            request_id: str,
+            query_text: str,
+    ):
+        pipe = session.createPipe()
         request = AgentRequest(
             query=query_text,
-            session_id=session_id,
+            session_id=session.session_id,
         )
+        try:
+            await asyncio.gather(
+                self._run_workflow(request, pipe, session.agent_id, request_id),
+                self._consume_and_forward(session, request_id, pipe)
+            )
+        finally:
+            if session.current_request_id == request_id:
+                session.pending_query_text = None
+                session.current_task = None
+                session.current_request_id = None
 
-        # 4. 启动两个并发任务
-        await asyncio.gather(
-            # 任务 A: 调用工作流引擎
-            self._run_workflow(request, pipe, session.agent_id, request_id),
-            # 任务 B: 消费 pipe 事件并转发
-            self._consume_and_forward(session, request_id, pipe)
-        )
-        logger.info(f"[msg] onUserMsg session_id={session_id} request_id={request_id}")
+    async def _ensure_agent(self, session: RuntimeSession, agent_id: Optional[str]) -> None:
+        if not agent_id:
+            return
+        agent_profile = self.agent_profile_storage.get(agent_id)
+        if not agent_profile:
+            logger.warning(f"[session] onEnsureAgent:Missing agent_profile session_id={session.session_id} agent_id={agent_id}")
+            return
+        if hasattr(self.engine, "get_agent") and not self.engine.get_agent(agent_id):
+            agent = AgentFactory.create_agent(agent_profile)
+            self.engine.register_agent(agent)
+        session.agent_id = agent_id
+        session.avatar_url = agent_profile.get("avatar_url")
 
     async def _run_workflow(
             self,
@@ -345,7 +383,7 @@ class SessionOrchestrator:
                 "error"
             }:
                 logger.info(
-                    f"[pipe] onEvent:\"{event['type']}\" session_id={session.session_id} request_id={request_id}"
+                    f"[pipe] onEvent:{event['type']} session_id={session.session_id} request_id={request_id}"
                 )
 
             if event_payload:

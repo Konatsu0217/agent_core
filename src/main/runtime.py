@@ -19,6 +19,9 @@ class RuntimeSession:
         self.created_at = datetime.now()
 
         self.pipe: Optional[ProcessPipe] = None
+        self.current_task = None
+        self.current_request_id = None
+        self.pending_query_text = None
 
         # 会话的配置
         self.RuntimeSessionConfig = plugin_config
@@ -29,7 +32,7 @@ class RuntimeSession:
         # 缓冲区
         self.buffer = []
         self.sendBuffer = []
-        logger.info(f"runtime_session_created session_id={session_id}")
+        logger.info(f"runtime_session_created session_id={session_id} and agent_id={agent_id}")
 
     def createPipe(self) -> ProcessPipe:
         self.pipe = ProcessPipe()
@@ -42,6 +45,11 @@ class RuntimeSession:
         if self.pipe:
             self.pipe.close()
             self.pipe = None
+        if self.current_task and not self.current_task.done():
+            self.current_task.cancel()
+        self.current_task = None
+        self.current_request_id = None
+        self.pending_query_text = None
 
     def delete(self):
         """删除会话，完全删除不可复原"""

@@ -125,6 +125,12 @@ async def upload_agent_profile(payload: Dict[str, Any] = Body(...)):
     merged = _deep_merge(base or {}, agent_profile)
     merged = _preserve_api_keys(base, agent_profile, merged)
     storage.create(agent_id, merged, merged.get("avatar_url"))
+    orchestrator = app.state.orchestrator
+    engine = orchestrator.engine if orchestrator else None
+    if engine and hasattr(engine, "get_agent") and engine.get_agent(agent_id):
+        from src.agent.agent_factory import AgentFactory
+        agent = AgentFactory.create_agent(merged)
+        engine.register_agent(agent)
     return {"agent_id": agent_id, "status": "upserted"}
 
 
@@ -261,6 +267,7 @@ def _parse_client_event(message: dict) -> ClientEventEnvelope:
         raise ValueError("missing_session_id")
     return ClientEventEnvelope(
         event_id=message.get("event_id", str(uuid.uuid4())),
+        agent_id=message.get("agent_id"),
         session_id=session_id,
         type=event_type,
         ts=message.get("ts", time.time()),
@@ -299,18 +306,18 @@ async def websocket_endpoint(websocket: WebSocket):
             session_id = envelope.session_id
             await get_ws_manager().cache_websocket(session_id, websocket)
             logger.info(
-                f"ws_message_received session_id={session_id} event_type={envelope.type} event_id={envelope.event_id} trace_id={envelope.trace_id}"
+                f"[ws] onReceive session_id={session_id} event_type={envelope.type} event_id={envelope.event_id} trace_id={envelope.trace_id}"
             )
             task = asyncio.create_task(orchestrator.handle_client_message(session_id, envelope))
             task.add_done_callback(
                 lambda t, s=session_id, e=envelope: logger.error(
-                    f"ws_message_handle_failed session_id={s} event_type={e.type} event_id={e.event_id} error={t.exception()}"
+                    f"[ws] onHandleFailed session_id={s} event_type={e.type} event_id={e.event_id} error={t.exception()}"
                 ) if t.exception() else None
             )
 
     except WebSocketDisconnect as e:
         logger.info(
-            f"ws_disconnected session_id={session_id} client={client_addr} code={getattr(e, 'code', None)}"
+            f"[ws] onDisconnected session_id={session_id} client={client_addr} code={getattr(e, 'code', None)}"
         )
         if session_id:
             await orchestrator.handle_detach_session(

@@ -24,3 +24,15 @@ class WorkflowEngine(ABC):
             agent_id: 可选的指定 agent
         """
         pass
+
+    def register_agent(self, agent):
+        """注册 Agent"""
+        pass
+
+    def unregist_agent(self, agent_id: str) -> None:
+        """注销 Agent"""
+        pass
+
+    def get_agent(self, agent_id: str):
+        """获取 Agent"""
+        pass

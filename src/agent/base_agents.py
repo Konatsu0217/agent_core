@@ -51,9 +51,16 @@ class BasicAgent(BaseAgent):
                         self.context,
                         pipe
                 ):
+                    if pipe and pipe.is_closed():
+                        break
                     if event["event"] == "final_content":
+                        if pipe and pipe.is_closed():
+                            break
                         await pipe.final_text(event["content"])
-                    get_context_manager().snapshot(self.context, "finish one Q&A workflow")
+                if pipe and pipe.is_cancelled():
+                    get_context_manager().snapshot(self.context, "request_cancelled")
+                    return
+                get_context_manager().snapshot(self.context, "finish one Q&A workflow")
 
             asyncio.create_task(_run())
         except Exception as e:
@@ -101,6 +108,9 @@ class ToolOnlyAgent(ToolUsingAgent):
 
             async def _run():
                 await self.run_with_tools(pipe)
+                if pipe and pipe.is_cancelled():
+                    get_context_manager().snapshot(self.context, "request_cancelled")
+                    return
                 get_context_manager().snapshot(self.context, "finish one Q&A workflow")
 
             asyncio.create_task(_run())
@@ -152,9 +162,16 @@ class MemoryOnlyAgent(MemoryAwareAgent):
                         self.context,
                         pipe
                 ):
+                    if pipe and pipe.is_closed():
+                        break
                     if event["event"] == "final_content":
+                        if pipe and pipe.is_closed():
+                            break
                         await pipe.final_text(event["content"])
                 text = await pipe.final
+                if pipe and pipe.is_cancelled():
+                    get_context_manager().snapshot(self.context, "request_cancelled")
+                    return
                 get_context_manager().snapshot(self.context, "finish one Q&A workflow")
                 asyncio.create_task(self.memory_hook(request, text))
 
@@ -232,6 +249,9 @@ class CombinedAgent(ToolUsingAgent, MemoryAwareAgent):
             async def _run():
                 await self.run_with_tools(pipe)
                 text = await pipe.final
+                if pipe and pipe.is_cancelled():
+                    get_context_manager().snapshot(self.context, "request_cancelled")
+                    return
                 get_context_manager().snapshot(self.context, "finish one Q&A workflow")
                 asyncio.create_task(self.memory_hook(request, text))
 

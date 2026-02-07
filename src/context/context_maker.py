@@ -150,7 +150,7 @@ class DefaultContextMaker(IContextMaker):
         # 获取会话
         if self.session_service:
             session_task = asyncio.create_task(self.session_service.get_session(
-                session_id, agent_id
+                session_id, agent_id # 这里废弃了所以红我也不管
             ))
             tasks.append(session_task)
         else:
@@ -188,6 +188,7 @@ class DefaultContextMaker(IContextMaker):
             context.messages.append({"role": "user", "content": user_query})
             context.tools = tools
             context.memory = rag_results
+            get_context_manager().snapshot(context, "request_cancelled")
 
         except asyncio.TimeoutError:
             logger.warning("❌ Timeout: Service request took too long")
