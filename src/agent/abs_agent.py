@@ -1,13 +1,41 @@
+import asyncio
 import json
 from abc import ABC, abstractmethod
 from enum import Enum
-from typing import Any, Dict, List, Coroutine, Optional
+from typing import Any, Dict, Coroutine, Optional
 
+from global_statics import logger
 from src.context.context import Context
 from src.context.manager import get_context_manager
-from src.domain.models.agent_data_models import AgentRequest
+from src.domain.agent_data_models import AgentRequest
 from src.infrastructure.clients.llm_clients.llm_client_manager import static_llmClientManager
 from src.infrastructure.utils.pipe import ProcessPipe
+
+
+async def _log_token_estimate(messages, model_name):
+    await asyncio.to_thread(_log_token_estimate_sync, messages, model_name)
+
+
+def _log_token_estimate_sync(messages, model_name):
+    try:
+        import tiktoken
+        encoding = None
+        if model_name:
+            try:
+                encoding = tiktoken.encoding_for_model(model_name)
+            except Exception:
+                encoding = None
+        if encoding is None:
+            encoding = tiktoken.get_encoding("cl100k_base")
+    except Exception:
+        logger.info("估算token: unknown")
+        return
+    try:
+        payload = json.dumps(messages, ensure_ascii=False, separators=(",", ":"))
+    except Exception:
+        payload = str(messages)
+    tokens = len(encoding.encode(payload))
+    logger.info(f"[LLM] 估算token: {tokens}")
 
 
 async def run_llm_with_tools(llm_client, context: Context, pipe: ProcessPipe | None = None):
@@ -19,16 +47,26 @@ async def run_llm_with_tools(llm_client, context: Context, pipe: ProcessPipe | N
     tool_call_id = None
 
     messages = [{"role": "system", "content": context.system_prompt}]
-    if context.memory is not None and context.memory.strip():
-        messages.append({"role": "memory", "content": context.memory})
+    memory_content = None
+    if context.memory is not None:
+        if isinstance(context.memory, dict):
+            memory_content = context.memory.get("result")
+        elif isinstance(context.memory, list):
+            memory_content = "\n".join(str(item) for item in context.memory if item)
+        else:
+            memory_content = str(context.memory)
+    if memory_content:
+        messages.append({"role": "assistant", "content": memory_content})
     messages.extend(context.messages)
 
-    print(messages)
+    asyncio.create_task(_log_token_estimate(messages, getattr(llm_client, "model_name", None)))
 
     async for raw in llm_client.chat_completion_stream(
             messages=messages,
             tools=context.tools
     ):
+        if pipe and pipe.is_closed():
+            return
         data = json.loads(raw)
         delta = data["choices"][0]["delta"]
         finish_reason = data["choices"][0]["finish_reason"]
@@ -40,11 +78,13 @@ async def run_llm_with_tools(llm_client, context: Context, pipe: ProcessPipe | N
         # ==== Content ====
         if delta.get("content"):
             buffer_delta["content"].append(delta["content"])
-            if pipe:
+            if pipe and not pipe.is_closed():
                 await pipe.text_delta(delta["content"])
 
         # ==== Tool Calls ====
         if delta.get("tool_calls"):
+            if pipe and pipe.is_closed():
+                return
             for call in delta["tool_calls"]:
                 cid = call["id"]
                 if tool_call_id is None:
@@ -72,6 +112,8 @@ async def run_llm_with_tools(llm_client, context: Context, pipe: ProcessPipe | N
                     parsed = json.loads(args)
                     # 如果成功解析 → yield 出去让外部执行
                     # messages.append(response.choices[0].message)
+                    if pipe and pipe.is_closed():
+                        return
                     yield {
                         "event": "tool_call",
                         "tool_call": {
@@ -93,6 +135,8 @@ async def run_llm_with_tools(llm_client, context: Context, pipe: ProcessPipe | N
 
         # ==== 流结束 ====
         if finish_reason:
+            if pipe and pipe.is_closed():
+                return
             yield {
                 "event": "final_content",
                 "role": buffer_delta["role"],
@@ -111,7 +155,7 @@ class IBaseAgent(ABC):
     """所有 Agent 的统一接口"""
     def __init__(self, agent_profile:Dict[str, Any], name: str, work_flow_type: ExecutionMode, use_tools: bool = True, output_format: str = "json"):
         # Agent 名称
-        self.name = name
+        self.agent_id = agent_profile.get("agent_id", name)
         # 工作模式：one-shot / ReAct / Plan-and-Solve
         self.work_flow_type = work_flow_type
         # 是否启用工具
@@ -172,11 +216,11 @@ class ServiceAwareAgent:
                     else:
                         # 如果没有setter方法，直接设置为属性
                         setattr(self, service_name, service)
-                    print(f"✅ 从容器获取 {service_name}")
+                    logger.info(f"✅ 从容器获取 {service_name}")
                 else:
-                    print(f"⚠️ {service_name} 未注册")
+                    logger.warning(f"⚠️ {service_name} 未注册")
         except ImportError:
-            print("⚠️ 服务容器未初始化")
+            logger.warning("⚠️ 服务容器未初始化")
 
 
 class BaseAgent(IBaseAgent, ServiceAwareAgent):
@@ -222,6 +266,7 @@ class BaseAgent(IBaseAgent, ServiceAwareAgent):
             ctx = get_context_manager().create_context(
                 session_id=session_id,
                 agent_id=self.agent_profile["agent_id"],
+                avatar_url=self.agent_profile.get("avatar_url"),
             )
             ctx.user_query = user_query
             return ctx
@@ -264,7 +309,6 @@ class ToolUsingAgent(BaseAgent):
         MAX_STEPS = int(self.agent_profile.get("behavior").get("max_tool_calls"))  # 防死循环
 
         for _ in range(MAX_STEPS):
-            # === 启动一轮 LLM 流式输出 ===
             tool_call_found = False
             final_answer = None
 
@@ -277,11 +321,15 @@ class ToolUsingAgent(BaseAgent):
                 if event["event"] == "tool_call":
                     tool_call_found = True
                     call = event["tool_call"]
-                    print(f"❕发现工具调用: {call}")
+                    logger.info(f"[LLM] 工具调用: {call}")
+                    if pipe and pipe.is_closed():
+                        return None
                     if pipe:
                         await pipe.tool_call(name=call['function']['name'], arguments=call['function']['arguments'])
 
                     # 1. 执行工具
+                    if pipe and pipe.is_closed():
+                        return None
                     if self.tool_manager:
                         result = await self.tool_manager.call_tool(call)
                     else:
@@ -306,15 +354,15 @@ class ToolUsingAgent(BaseAgent):
                             decision = await pipe.wait_for_approval(approval_id)
                             if decision == "approved":
                                 approval_result = await self.tool_manager.approve_tool(approval_id)
-                                print(f"✅ 批准结果: {approval_result}")
+                                logger.info(f"[MCP] 批准结果: {approval_result}")
                                 result = approval_result
                             else:
                                 rejection_result = await self.tool_manager.reject_tool(approval_id)
-                                print(f"❌ 拒绝结果: {rejection_result}")
+                                logger.warning(f"[MCP] 拒绝结果: {rejection_result}")
                                 result = rejection_result
                         else:
                             rejection_result = await self.tool_manager.reject_tool(approval_id)
-                            print(f"❌ 拒绝结果: {rejection_result}")
+                            logger.warning(f"[MCP] 拒绝结果: {rejection_result}")
                             result = rejection_result
 
                     # 3. 将工具结果加入 messages
@@ -322,6 +370,8 @@ class ToolUsingAgent(BaseAgent):
                         error_msg = result.get("error", "") or result.get("message", "")
                         if pipe:
                             await pipe.tool_result(call['function']['name'], False, {"error": error_msg})
+                        if pipe and pipe.is_closed():
+                            return None
                         self.context.messages.append({
                             "role": "user",
                             "content": f"工具调用 {call['id']} 失败：{error_msg}"
@@ -331,6 +381,8 @@ class ToolUsingAgent(BaseAgent):
                     msg = result.get("result", {}).get("data", "") or result.get("result", "")
                     if pipe:
                         await pipe.tool_result(call['function']['name'], True, msg)
+                    if pipe and pipe.is_closed():
+                        return None
                     await self.append_tool_call(self.context.messages, call, msg, final_answer)
 
                     # 注意：不要 break —— event 的流要读完
@@ -345,17 +397,21 @@ class ToolUsingAgent(BaseAgent):
             # ========= 一轮流结束后 =========
             if tool_call_found:
                 # 有工具调用 → 开启下一轮 LLM 运行
-                print("检测到工具调用，进入下一轮")
+                logger.info("[LLM] 检测到工具调用，进入下一轮")
                 continue
 
             # 没有工具调用 → 直接返回最终答案
-            print("无工具调用，返回最终结果")
+            logger.info("[LLM] 无工具调用，返回最终结果")
+            if pipe and pipe.is_closed():
+                return None
             if pipe:
                 await pipe.final_text(final_answer or "")
                 self.context.messages.append({"role": "assistant", "content": final_answer})
             return final_answer
 
         # 超出最大循环
+        await  pipe.final_text("Exceeded max ReAct steps!!" or "")
+        logger.warning("[LLM] 工具调用轮次达到上限")
         return "{\"error\": \"Exceeded max ReAct steps\"}"
 
     @staticmethod
@@ -398,7 +454,8 @@ class MemoryAwareAgent(BaseAgent):
         if request.extraInfo.get("add_memory", True) and self.memory_service:
             self.response_cache["query"] = request.query
             self.response_cache["response"] = {"response": text}
-            return self.add_memory(request.session_id)
+            await self.add_memory(request.session_id)
+            return None
         return None
 
     async def add_memory(self, session_id: str) -> None:

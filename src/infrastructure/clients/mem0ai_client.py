@@ -4,6 +4,9 @@ from pathlib import Path
 from typing import Dict, Any, List
 
 from mem0 import Memory
+from src.infrastructure.logging.logger import get_logger
+
+logger = get_logger()
 
 
 class MemoryManager:
@@ -40,7 +43,7 @@ class MemoryManager:
             metadata: 可选的元数据
         """
         self._memory.add(messages, user_id=user_id, metadata=metadata)
-        print(f"memory added: {messages}")
+        logger.debug(f"memory added: {messages}")
 
     async def search(self, query: str | List[Dict[str, str]], user_id: str, limit: int = 3) -> List[Dict[str, Any]]:
         """

@@ -1,9 +1,15 @@
 import asyncio
+import json
 from abc import ABC, abstractmethod
 from typing import List, Dict, Any, Optional
 
+from sqlalchemy.util import deprecated
+
 from src.context.context import Context
 from src.context.manager import get_context_manager
+from src.infrastructure.logging.logger import get_logger
+
+logger = get_logger()
 
 
 class IContextMaker(ABC):
@@ -18,6 +24,9 @@ class IContextMaker(ABC):
     async def augment_context(self, context: Context, **kwargs) -> Context:
         """增强上下文"""
         pass
+
+    async def delete_context(self, session_id: str, agent_id: Optional[str] = None) -> int:
+        raise NotImplementedError()
 
 
 class DefaultContextMaker(IContextMaker):
@@ -68,6 +77,7 @@ class DefaultContextMaker(IContextMaker):
         """构建上下文"""
         cm = get_context_manager()
         agent_id = (self.agent_profile or {}).get("agent_id", "DefaultAgent")
+        avatar_url = (self.agent_profile or {}).get("avatar_url")
         context = cm.get_latest(session_id, agent_id)
         if not context:
             context = cm.create_context(
@@ -78,10 +88,12 @@ class DefaultContextMaker(IContextMaker):
                 tools=[],
                 memory=[],
                 session=None,
+                avatar_url=avatar_url,
                 **kwargs
             )
         else:
             context.user_query = user_query
+            context.avatar_url = avatar_url
         
         # 构建prompt和tools
         await self._build_prompt_and_tools(context, **kwargs)
@@ -138,7 +150,7 @@ class DefaultContextMaker(IContextMaker):
         # 获取会话
         if self.session_service:
             session_task = asyncio.create_task(self.session_service.get_session(
-                session_id, "DefaultAgent"
+                session_id, agent_id # 这里废弃了所以红我也不管
             ))
             tasks.append(session_task)
         else:
@@ -157,15 +169,15 @@ class DefaultContextMaker(IContextMaker):
 
             # 处理异常
             if isinstance(system_prompt, Exception):
-                print(f"❌ PE build_prompt failed: {system_prompt}")
+                logger.error(f"❌ PE build_prompt failed: {system_prompt}")
                 return
 
             if isinstance(tools, Exception):
-                print(f"⚠️ ToolManager get_tools failed: {tools}")
+                logger.warning(f"⚠️ ToolManager get_tools failed: {tools}")
                 tools = []
 
             if isinstance(rag_results, Exception):
-                print(f"⚠️ MemoryService search failed: {rag_results}")
+                logger.warning(f"⚠️ MemoryService search failed: {rag_results}")
                 rag_results = None
 
             # 移除末尾多余的换行
@@ -176,14 +188,21 @@ class DefaultContextMaker(IContextMaker):
             context.messages.append({"role": "user", "content": user_query})
             context.tools = tools
             context.memory = rag_results
+            get_context_manager().snapshot(context, "request_cancelled")
 
         except asyncio.TimeoutError:
-            print("❌ Timeout: Service request took too long")
+            logger.warning("❌ Timeout: Service request took too long")
         except Exception as e:
-            print(f"❌ Unexpected error: {e}")
+            logger.exception(f"❌ Unexpected error: {e}")
     
     async def augment_context(self, context: Context, **kwargs) -> Context:
         """增强上下文"""
         for augmenter in self.augmenters:
             context = await augmenter.augment(context, **kwargs)
         return context
+
+    async def delete_context(self, session_id: str, agent_id: Optional[str] = None) -> int:
+        cm = get_context_manager()
+        if agent_id:
+            return cm.delete_history(session_id, agent_id)
+        return cm.clear_session(session_id)

@@ -1,6 +1,9 @@
 import asyncio
 from typing import List, Dict, Any
-from src.services.interfaces.memory_service import IMemoryService
+from src.di.services.interfaces.memory_service import IMemoryService
+from src.infrastructure.logging.logger import get_logger
+
+logger = get_logger()
 
 # 尝试导入 MemoryManager，如果失败则使用模拟实现
 try:
@@ -8,15 +11,7 @@ try:
     has_mem0 = True
 except ImportError:
     has_mem0 = False
-    print("⚠️ mem0 模块未安装，将使用模拟实现")
-    
-    # 模拟 MemoryManager 类
-    class MemoryManager:
-        async def search(self, **kwargs):
-            return []
-        
-        def add(self, messages, user_id):
-            pass
+    logger.warning("⚠️ mem0 模块未安装，将使用模拟实现")
 
 
 class Mem0MemoryService(IMemoryService):
@@ -31,15 +26,9 @@ class Mem0MemoryService(IMemoryService):
         try:
             return await self.mem.search(query=query, user_id=user_id, limit=limit)
         except Exception as e:
-            print(f"⚠️ Mem0Client search failed: {e}")
+            logger.warning(f"⚠️ Mem0Client search failed: {e}")
             return []
     
     async def add(self, messages: List[Dict[str, Any]], user_id: str) -> None:
         """添加记忆"""
-        loop = asyncio.get_running_loop()
-        await loop.run_in_executor(
-            None,  # 默认 ThreadPoolExecutor
-            self.mem.add,
-            messages,
-            user_id
-        )
+        await asyncio.to_thread(self.mem.add, messages, user_id)

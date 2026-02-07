@@ -1,12 +1,10 @@
-from typing import AsyncGenerator
-
 from fastapi import FastAPI, Body, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 from starlette.responses import JSONResponse
 
 from global_statics import tts_engines, tts_config
-from src.shared.utils.connet_manager import PlayWSManager
+from src.infrastructure.utils.connet_manager import PlayWSManager
 from src.infrastructure.utils import get_logger
 
 # 4. 创建FastAPI应用实例

@@ -4,15 +4,18 @@ from typing import Any, Dict, Coroutine
 from src.agent.abs_agent import ExecutionMode, BaseAgent, ToolUsingAgent, \
     MemoryAwareAgent
 from src.context.manager import get_context_manager
-from src.domain.models import AgentRequest
+from src.domain.agent_data_models import AgentRequest
 from src.infrastructure.utils.pipe import ProcessPipe
+from src.infrastructure.logging.logger import get_logger
+
+logger = get_logger()
 
 
 class BasicAgent(BaseAgent):
     """基础 Agent，不使用工具和记忆"""
 
     def __init__(self, agent_profile: Dict[str, Any], work_flow_type: ExecutionMode):
-        name = agent_profile.get("name", "basic_agent")
+        name = agent_profile.get("agent_id", "basic_agent")
         use_tools = agent_profile.get("tools_use", False)
         output_format = agent_profile.get("output_format", "json")
         super().__init__(agent_profile=agent_profile, name=name, work_flow_type=work_flow_type, use_tools=use_tools, output_format=output_format)
@@ -48,9 +51,16 @@ class BasicAgent(BaseAgent):
                         self.context,
                         pipe
                 ):
+                    if pipe and pipe.is_closed():
+                        break
                     if event["event"] == "final_content":
+                        if pipe and pipe.is_closed():
+                            break
                         await pipe.final_text(event["content"])
-                    get_context_manager().snapshot(self.context, "finish one Q&A workflow")
+                if pipe and pipe.is_cancelled():
+                    get_context_manager().snapshot(self.context, "request_cancelled")
+                    return
+                get_context_manager().snapshot(self.context, "finish one Q&A workflow")
 
             asyncio.create_task(_run())
         except Exception as e:
@@ -72,7 +82,7 @@ class ToolOnlyAgent(ToolUsingAgent):
     """只使用工具的 Agent"""
 
     def __init__(self, agent_profile: Dict[str, Any], work_flow_type: ExecutionMode):
-        name = agent_profile.get("name", "tool_only_agent")
+        name = agent_profile.get("agent_id", "tool_only_agent")
         use_tools = agent_profile.get("tools_use", True)
         output_format = agent_profile.get("output_format", "json")
         super().__init__(agent_profile=agent_profile, name=name, work_flow_type=work_flow_type, use_tools=use_tools, output_format=output_format)
@@ -98,6 +108,9 @@ class ToolOnlyAgent(ToolUsingAgent):
 
             async def _run():
                 await self.run_with_tools(pipe)
+                if pipe and pipe.is_cancelled():
+                    get_context_manager().snapshot(self.context, "request_cancelled")
+                    return
                 get_context_manager().snapshot(self.context, "finish one Q&A workflow")
 
             asyncio.create_task(_run())
@@ -117,7 +130,7 @@ class MemoryOnlyAgent(MemoryAwareAgent):
     """只使用记忆的 Agent"""
 
     def __init__(self, agent_profile: Dict[str, Any], work_flow_type: ExecutionMode):
-        name = agent_profile.get("name", "memory_only_agent")
+        name = agent_profile.get("agent_id", "memory_only_agent")
         use_tools = agent_profile.get("tools_use", False)
         output_format = agent_profile.get("output_format", "json")
         super().__init__(agent_profile=agent_profile, name=name, work_flow_type=work_flow_type, use_tools=use_tools, output_format=output_format)
@@ -149,9 +162,16 @@ class MemoryOnlyAgent(MemoryAwareAgent):
                         self.context,
                         pipe
                 ):
+                    if pipe and pipe.is_closed():
+                        break
                     if event["event"] == "final_content":
+                        if pipe and pipe.is_closed():
+                            break
                         await pipe.final_text(event["content"])
                 text = await pipe.final
+                if pipe and pipe.is_cancelled():
+                    get_context_manager().snapshot(self.context, "request_cancelled")
+                    return
                 get_context_manager().snapshot(self.context, "finish one Q&A workflow")
                 asyncio.create_task(self.memory_hook(request, text))
 
@@ -173,7 +193,7 @@ class CombinedAgent(ToolUsingAgent, MemoryAwareAgent):
     """同时使用工具和记忆的 Agent"""
 
     def __init__(self, agent_profile: Dict[str, Any], work_flow_type: ExecutionMode):
-        name = agent_profile.get("name", "combined_agent")
+        name = agent_profile.get("agent_id", "combined_agent")
         use_tools = agent_profile.get("tools_use", True)
         output_format = agent_profile.get("output_format", "json")
 
@@ -218,9 +238,9 @@ class CombinedAgent(ToolUsingAgent, MemoryAwareAgent):
             )
 
             self.set_context_maker(context_maker)
-            print("✅ 上下文构建器初始化完成")
+            logger.info("✅ 上下文构建器初始化完成")
         except ImportError:
-            print("⚠️ 上下文构建器未初始化")
+            logger.warning("⚠️ 上下文构建器未初始化")
 
     async def process(self, request: AgentRequest, pipe: ProcessPipe) -> None:
         try:
@@ -229,6 +249,9 @@ class CombinedAgent(ToolUsingAgent, MemoryAwareAgent):
             async def _run():
                 await self.run_with_tools(pipe)
                 text = await pipe.final
+                if pipe and pipe.is_cancelled():
+                    get_context_manager().snapshot(self.context, "request_cancelled")
+                    return
                 get_context_manager().snapshot(self.context, "finish one Q&A workflow")
                 asyncio.create_task(self.memory_hook(request, text))
 

@@ -1,5 +1,8 @@
 import struct
 import zlib
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 class Proto:
@@ -24,7 +27,7 @@ class Proto:
 
     def unpack(self, buf):
         if len(buf) < self.headerLen:
-            print("包头不够")
+            logger.warning("包头不够")
             return
         self.packetLen = struct.unpack('>i', buf[0:4])[0]
         self.headerLen = struct.unpack('>h', buf[4:6])[0]
@@ -32,11 +35,10 @@ class Proto:
         self.op = struct.unpack('>i', buf[8:12])[0]
         self.seq = struct.unpack('>i', buf[12:16])[0]
         if self.packetLen < 0 or self.packetLen > self.maxBody:
-            print("包体长不对", "self.packetLen:", self.packetLen,
-                  " self.maxBody:", self.maxBody)
+            logger.warning(f"包体长不对 self.packetLen: {self.packetLen} self.maxBody: {self.maxBody}")
             return
         if self.headerLen != self.headerLen:
-            print("包头长度不对")
+            logger.warning("包头长度不对")
             return
         bodyLen = self.packetLen - self.headerLen
         self.body = buf[16:self.packetLen]
@@ -44,7 +46,7 @@ class Proto:
             return
         if self.ver == 0:
             # 这里做回调
-            print("====> callback:", self.body.decode('utf-8'))
+            logger.debug(f"====> callback: {self.body.decode('utf-8')}")
         else:
             return
 

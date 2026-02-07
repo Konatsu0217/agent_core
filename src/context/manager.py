@@ -7,6 +7,9 @@ from typing import Dict, List, Optional, Any
 from src.context.context import Context
 from src.context.storage.in_memory import InMemoryStorage
 from src.context.storage.sqlite_storage import SQLiteStorage
+from src.infrastructure.logging.logger import get_logger
+
+logger = get_logger()
 
 
 class ContextManager:
@@ -46,7 +49,7 @@ class ContextManager:
             self._record(ctx)
             for fn in self._post_snapshot_hooks:
                 try:
-                    fn(ctx)
+                    fn(note)
                 except Exception:
                     pass
         return ctx
@@ -55,7 +58,7 @@ class ContextManager:
         ctx.messages = ctx.messages + [message]
         return self.snapshot(ctx) if auto_snapshot else ctx
 
-    def get_history(self, session_id: str, agent_id: str) -> list[Context] | None:
+    def get_history(self, session_id: str, agent_id: str) -> Optional[List[Context]]:
         if session_id in self._history:
             return self._history.get(self._key(session_id, agent_id), [])
         else:
@@ -72,6 +75,48 @@ class ContextManager:
     def get_latest(self, session_id: str, agent_id: str) -> Optional[Context]:
         hist = self.get_history(session_id, agent_id)
         return hist[-1] if hist else None
+
+    def delete_history(self, session_id: str, agent_id: str) -> int:
+        key = self._key(session_id, agent_id)
+        lock = self._get_lock(key)
+        with lock:
+            self._history.pop(key, None)
+            if hasattr(self.storage, "delete_by_key"):
+                return self.storage.delete_by_key(key)
+        return 0
+
+    def clear_session(self, session_id: str) -> int:
+        prefix = f"{session_id}:"
+        keys_to_delete = [k for k in self._history.keys() if k.startswith(prefix)]
+        for key in keys_to_delete:
+            self._history.pop(key, None)
+        if hasattr(self.storage, "delete_by_prefix"):
+            return self.storage.delete_by_prefix(prefix)
+        return 0
+
+    def delete_versions(
+        self,
+        session_id: str,
+        agent_id: str,
+        min_version: Optional[int] = None,
+        max_version: Optional[int] = None,
+    ) -> int:
+        key = self._key(session_id, agent_id)
+        lock = self._get_lock(key)
+        with lock:
+            hist = self._history.get(key, [])
+            if hist:
+                self._history[key] = [
+                    c
+                    for c in hist
+                    if not (
+                        (min_version is None or c.version >= min_version)
+                        and (max_version is None or c.version <= max_version)
+                    )
+                ]
+            if hasattr(self.storage, "delete_by_version_range"):
+                return self.storage.delete_by_version_range(key, min_version, max_version)
+        return 0
 
     def rollback(self, session_id: str, agent_id: str, version: int) -> Optional[Context]:
         key = self._key(session_id, agent_id)
@@ -109,9 +154,8 @@ class ContextManager:
 
 _manager = ContextManager(SQLiteStorage())
 _manager.register_post_snapshot_hook(
-    lambda ctx: print(f"Made a Snapshot of Context, estimated token: {(ctx.messages.__sizeof__() + ctx.system_prompt.__sizeof__() + ctx.tools.__sizeof__() + ctx.tools.__sizeof__())/3.5}")
+    lambda ctx, note: logger.info(f"Made a Snapshot of Context, note={note}")
 )
 
 def get_context_manager() -> ContextManager:
     return _manager
-

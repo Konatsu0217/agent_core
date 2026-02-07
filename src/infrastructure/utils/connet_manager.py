@@ -4,8 +4,10 @@ from typing import List, Dict
 
 from starlette.websockets import WebSocket
 
+from src.domain.events import EventEnvelope
 
-class PlayWSManager:
+
+class WebSocketManager:
     def __init__(self):
         self.cache: Dict[str, WebSocket] = {}
 
@@ -25,22 +27,16 @@ class PlayWSManager:
         for session_id, websocket in self.cache.items():
             await websocket.send_text(msg)
 
-    async def send_chunk_to(self, session_id: str, msg: bytes):
-        websocket = self.cache.get(session_id)
-        if websocket:
-            await websocket.send_bytes(msg)
-
-    async def send_json_to(self, session_id: str, msg: dict):
+    async def send_event_to(self, session_id: str, msg: EventEnvelope):
         websocket = self.cache.get(session_id)
         if websocket:
             await websocket.send_json(msg)
 
-    async def send_msg_to(self, session_id: str, chunk: str):
-        websocket = self.cache.get(session_id)
-        if websocket:
-            await websocket.send_text(chunk)
 
+_ws_manager = WebSocketManager()
 
+def get_ws_manager() -> WebSocketManager:
+    return _ws_manager
 
 
 
