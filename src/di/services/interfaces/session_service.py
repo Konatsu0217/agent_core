@@ -6,6 +6,6 @@ class ISessionService(ABC):
     """会话服务接口"""
     
     @abstractmethod
-    async def get_session(self, session_id: str, agent_name: str) -> Dict[str, Any]:
+    async def get_session(self, session_id: str, agent_id: str) -> Dict[str, Any]:
         """获取会话信息"""
         pass

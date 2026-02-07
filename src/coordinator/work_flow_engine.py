@@ -13,7 +13,7 @@ class WorkflowEngine(ABC):
             self,
             request: AgentRequest,
             pipe: ProcessPipe,
-            agent_name: Optional[str] = None
+            agent_id: Optional[str] = None
     ) -> None:
         """
         处理请求并将事件写入 pipe
@@ -21,6 +21,6 @@ class WorkflowEngine(ABC):
         Args:
             request: 标准化请求
             pipe: 事件管道
-            agent_name: 可选的指定 agent
+            agent_id: 可选的指定 agent
         """
         pass

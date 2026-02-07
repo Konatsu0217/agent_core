@@ -147,7 +147,7 @@ class IBaseAgent(ABC):
     """所有 Agent 的统一接口"""
     def __init__(self, agent_profile:Dict[str, Any], name: str, work_flow_type: ExecutionMode, use_tools: bool = True, output_format: str = "json"):
         # Agent 名称
-        self.name = name
+        self.agent_id = agent_profile.get("agent_id", name)
         # 工作模式：one-shot / ReAct / Plan-and-Solve
         self.work_flow_type = work_flow_type
         # 是否启用工具
@@ -258,6 +258,7 @@ class BaseAgent(IBaseAgent, ServiceAwareAgent):
             ctx = get_context_manager().create_context(
                 session_id=session_id,
                 agent_id=self.agent_profile["agent_id"],
+                avatar_url=self.agent_profile.get("avatar_url"),
             )
             ctx.user_query = user_query
             return ctx

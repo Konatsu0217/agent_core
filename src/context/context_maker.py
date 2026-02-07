@@ -77,6 +77,7 @@ class DefaultContextMaker(IContextMaker):
         """构建上下文"""
         cm = get_context_manager()
         agent_id = (self.agent_profile or {}).get("agent_id", "DefaultAgent")
+        avatar_url = (self.agent_profile or {}).get("avatar_url")
         context = cm.get_latest(session_id, agent_id)
         if not context:
             context = cm.create_context(
@@ -87,10 +88,12 @@ class DefaultContextMaker(IContextMaker):
                 tools=[],
                 memory=[],
                 session=None,
+                avatar_url=avatar_url,
                 **kwargs
             )
         else:
             context.user_query = user_query
+            context.avatar_url = avatar_url
         
         # 构建prompt和tools
         await self._build_prompt_and_tools(context, **kwargs)
@@ -147,7 +150,7 @@ class DefaultContextMaker(IContextMaker):
         # 获取会话
         if self.session_service:
             session_task = asyncio.create_task(self.session_service.get_session(
-                session_id, "DefaultAgent"
+                session_id, agent_id
             ))
             tasks.append(session_task)
         else:

@@ -16,10 +16,10 @@ class DefaultSessionService(ISessionService):
     def __init__(self):
         self.session_manager = get_session_manager()
 
-    async def get_session(self, session_id: str, agent_name: str) -> Dict[str, Any]:
+    async def get_session(self, session_id: str, agent_id: str) -> Dict[str, Any]:
         """获取会话信息"""
         try:
-            return await self.session_manager.get_session(session_id, agent_name)
+            return await self.session_manager.get_session(session_id, agent_id)
         except Exception as e:
             logger.warning(f"⚠️ SessionManager get_session failed: {e}")
             return {}

@@ -17,7 +17,6 @@ class AgentFactory:
         
         Args:
             agent_profile: Agent 配置文件，包含以下字段：
-                - name: Agent 名称
                 - tools_use: 是否使用工具
                 - memory: 是否使用记忆
                 - services_needed: 需要的服务列表

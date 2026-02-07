@@ -20,21 +20,21 @@ class AgentCoordinator(WorkflowEngine):
     
     def register_agent(self, agent):
         """注册 Agent"""
-        self.agents[agent.name] = agent
+        self.agents[agent.agent_id] = agent
     
-    def get_agent(self, agent_name: str) -> Optional[Any]:
+    def get_agent(self, agent_id: str) -> Optional[Any]:
         """获取 Agent"""
-        return self.agents.get(agent_name)
+        return self.agents.get(agent_id)
     
     def set_task_dispatcher(self, task_dispatcher):
         """设置任务分发器"""
         self.task_dispatcher = task_dispatcher
     
-    async def process(self, request: AgentRequest,  pipe: ProcessPipe, agent_name: Optional[str] = None) -> None:
+    async def process(self, request: AgentRequest,  pipe: ProcessPipe, agent_id: Optional[str] = None) -> None:
         """处理请求"""
         # 如果指定了 Agent，直接使用
-        if agent_name:
-            agent = self.get_agent(agent_name)
+        if agent_id:
+            agent = self.get_agent(agent_id)
             await run_with_pipe(agent, request, pipe)
             return
         
@@ -72,7 +72,7 @@ class TaskDispatcher:
         query = request.query.lower()
         
         # 根据查询内容选择 Agent
-        for agent_name, agent in agents.items():
+        for agent_id, agent in agents.items():
             capabilities = agent.get_capabilities()
             if self._match_request(query, capabilities):
                 return agent

@@ -15,7 +15,7 @@ class BasicAgent(BaseAgent):
     """基础 Agent，不使用工具和记忆"""
 
     def __init__(self, agent_profile: Dict[str, Any], work_flow_type: ExecutionMode):
-        name = agent_profile.get("name", "basic_agent")
+        name = agent_profile.get("agent_id", "basic_agent")
         use_tools = agent_profile.get("tools_use", False)
         output_format = agent_profile.get("output_format", "json")
         super().__init__(agent_profile=agent_profile, name=name, work_flow_type=work_flow_type, use_tools=use_tools, output_format=output_format)
@@ -75,7 +75,7 @@ class ToolOnlyAgent(ToolUsingAgent):
     """只使用工具的 Agent"""
 
     def __init__(self, agent_profile: Dict[str, Any], work_flow_type: ExecutionMode):
-        name = agent_profile.get("name", "tool_only_agent")
+        name = agent_profile.get("agent_id", "tool_only_agent")
         use_tools = agent_profile.get("tools_use", True)
         output_format = agent_profile.get("output_format", "json")
         super().__init__(agent_profile=agent_profile, name=name, work_flow_type=work_flow_type, use_tools=use_tools, output_format=output_format)
@@ -120,7 +120,7 @@ class MemoryOnlyAgent(MemoryAwareAgent):
     """只使用记忆的 Agent"""
 
     def __init__(self, agent_profile: Dict[str, Any], work_flow_type: ExecutionMode):
-        name = agent_profile.get("name", "memory_only_agent")
+        name = agent_profile.get("agent_id", "memory_only_agent")
         use_tools = agent_profile.get("tools_use", False)
         output_format = agent_profile.get("output_format", "json")
         super().__init__(agent_profile=agent_profile, name=name, work_flow_type=work_flow_type, use_tools=use_tools, output_format=output_format)
@@ -176,7 +176,7 @@ class CombinedAgent(ToolUsingAgent, MemoryAwareAgent):
     """同时使用工具和记忆的 Agent"""
 
     def __init__(self, agent_profile: Dict[str, Any], work_flow_type: ExecutionMode):
-        name = agent_profile.get("name", "combined_agent")
+        name = agent_profile.get("agent_id", "combined_agent")
         use_tools = agent_profile.get("tools_use", True)
         output_format = agent_profile.get("output_format", "json")
 

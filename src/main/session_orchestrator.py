@@ -2,7 +2,7 @@
 import asyncio
 import uuid
 import dataclasses
-from typing import Dict, Optional
+from typing import Dict, Optional, List, Any
 from datetime import datetime
 
 from src.coordinator.work_flow_engine import WorkflowEngine
@@ -13,6 +13,9 @@ from src.domain.events import (
     ToolCallPayload, ToolResultPayload, FinalPayload, ApprovalRequiredPayload, ApprovalDecisionPayload,
     ErrorPayload, ToolApprovalPayload
 )
+from src.agent.agent_factory import AgentFactory
+from src.agent.storage.sqlite_agent_profile_storage import SQLiteAgentProfileStorage
+from src.context.manager import get_context_manager
 from src.infrastructure.utils.connet_manager import get_ws_manager
 from src.infrastructure.utils.pipe import ProcessPipe, AgentEvent
 from src.main.runtime import RuntimeSession
@@ -26,9 +29,11 @@ class SessionOrchestrator:
     def __init__(
             self,
             workflow_engine: WorkflowEngine,  # AgentCoordinator 的接口
+            agent_profile_storage: SQLiteAgentProfileStorage,
     ):
         self.engine = workflow_engine
         self.ws = get_ws_manager()
+        self.agent_profile_storage = agent_profile_storage
 
         # 会话状态
         self.active_sessions: Dict[str, RuntimeSession] = {}
@@ -41,38 +46,43 @@ class SessionOrchestrator:
         """处理客户端消息"""
         event_type = message.type
         logger.info(f"[client] onEvent:Received session_id={session_id} event_type={event_type}")
-        match event_type:
-            case ClientEventType.USER_MESSAGE:
-                await self.handle_user_message(session_id, message.payload)
-
-            case ClientEventType.INIT_SESSION:
-                await self.handle_session_init(session_id, message.payload)
-
-            case ClientEventType.ATTACH_SESSION:
-                await self.handle_attach_session(session_id, message.payload)
-
-            case ClientEventType.DETACH_SESSION:
-                await self.handle_detach_session(session_id, message.payload)
-
-            case ClientEventType.DELETE_SESSION:
-                await self.handle_delete_session(session_id, message.payload)
-
-            case ClientEventType.HEARTBEAT:
-                await self.handle_heartbeat(session_id, message.payload)
-
-            case ClientEventType.TOOL_APPROVAL:
-                await self.handle_tool_approval(session_id, message.payload)
-
-            case _:
-                logger.warning(f"[client] onEvent:Unhandled session_id={session_id} event_type={event_type}")
+        if event_type == ClientEventType.USER_MESSAGE:
+            await self.handle_user_message(session_id, message.payload)
+        elif event_type == ClientEventType.INIT_SESSION:
+            await self.handle_session_init(session_id, message.payload)
+        elif event_type == ClientEventType.ATTACH_SESSION:
+            await self.handle_attach_session(session_id, message.payload)
+        elif event_type == ClientEventType.DETACH_SESSION:
+            await self.handle_detach_session(session_id, message.payload)
+        elif event_type == ClientEventType.DELETE_SESSION:
+            await self.handle_delete_session(session_id, message.payload)
+        elif event_type == ClientEventType.HEARTBEAT:
+            await self.handle_heartbeat(session_id, message.payload)
+        elif event_type == ClientEventType.TOOL_APPROVAL:
+            await self.handle_tool_approval(session_id, message.payload)
+        else:
+            logger.warning(f"[client] onEvent:Unhandled session_id={session_id} event_type={event_type}")
 
     async def handle_session_init(self, session_id: str, payload: ClientEventPayload):
         """处理会话初始化"""
         plugin_keys = list(payload.plugin_config.keys()) if getattr(payload, "plugin_config", None) else []
         logger.info(f"[session] onInit:Start session_id={session_id} plugin_keys={plugin_keys}")
+        agent_id = getattr(payload, "agent_id", None)
+        if not agent_id:
+            logger.warning(f"[session] onInit:Missing agent_id session_id={session_id}")
+            return
+        agent_profile = self.agent_profile_storage.get(agent_id)
+        if not agent_profile:
+            logger.warning(f"[session] onInit:Missing agent_profile session_id={session_id} agent_id={agent_id}")
+            return
+        if hasattr(self.engine, "get_agent") and not self.engine.get_agent(agent_id):
+            agent = AgentFactory.create_agent(agent_profile)
+            self.engine.register_agent(agent)
         session = RuntimeSession(
             session_id=session_id,
             plugin_config=payload.plugin_config,
+            agent_id=agent_id,
+            avatar_url=agent_profile.get("avatar_url"),
         )
 
         # 存一下会话
@@ -87,7 +97,9 @@ class SessionOrchestrator:
             source="system",
             payload=StatePayload(
                 phase="initialized",
-                progress=0.0
+                progress=0.0,
+                avatar_url=session.avatar_url,
+                recent_messages=self._get_recent_messages(session_id, agent_id),
             )
         ))
         logger.info(f"[session] onInit:Done session_id={session_id}")
@@ -102,6 +114,8 @@ class SessionOrchestrator:
             logger.info(f"[session] onCreate:Done session_id={session_id} reason=attach")
         
         # 发送当前状态
+        session = self.active_sessions[session_id]
+        agent_id = getattr(session, "agent_id", None)
         await self._send_event(session_id, ServiceEventEnvelope(
             session_id=session_id,
             event_id=str(uuid.uuid4()),
@@ -110,7 +124,9 @@ class SessionOrchestrator:
             source="system",
             payload=StatePayload(
                 phase="attached",
-                progress=0.0
+                progress=0.0,
+                avatar_url=getattr(session, "avatar_url", None),
+                recent_messages=self._get_recent_messages(session_id, agent_id) if agent_id else None,
             )
         ))
         logger.info(f"[session] onAttach:Done session_id={session_id}")
@@ -220,7 +236,7 @@ class SessionOrchestrator:
         # 4. 启动两个并发任务
         await asyncio.gather(
             # 任务 A: 调用工作流引擎
-            self._run_workflow(request, pipe, None, request_id),
+            self._run_workflow(request, pipe, session.agent_id, request_id),
             # 任务 B: 消费 pipe 事件并转发
             self._consume_and_forward(session, request_id, pipe)
         )
@@ -230,21 +246,21 @@ class SessionOrchestrator:
             self,
             request: AgentRequest,
             pipe: ProcessPipe,
-            agent_name: Optional[str],
+            agent_id: Optional[str],
             request_id: str
     ):
         """调用工作流引擎"""
         try:
             logger.info(
-                f"[flow] onEvent:Start session_id={request.session_id} request_id={request_id} agent_name={agent_name}"
+                f"[flow] onEvent:Start session_id={request.session_id} request_id={request_id} agent_id={agent_id}"
             )
-            await self.engine.process(request, pipe, agent_name)
+            await self.engine.process(request, pipe, agent_id)
             logger.info(
-                f"[flow] onEvent:Done session_id={request.session_id} request_id={request_id} agent_name={agent_name}"
+                f"[flow] onEvent:Done session_id={request.session_id} request_id={request_id} agent_id={agent_id}"
             )
         except Exception as e:
             logger.exception(
-                f"[flow] onEvent:Failed session_id={request.session_id} request_id={request_id} agent_name={agent_name} error={e}"
+                f"[flow] onEvent:Failed session_id={request.session_id} request_id={request_id} agent_id={agent_id} error={e}"
             )
             await pipe.error(f"工作流执行失败: {str(e)}")
 
@@ -431,3 +447,15 @@ class SessionOrchestrator:
             await self.ws.send_event_to(session_id, data)
         except Exception as e:
             logger.exception(f"[ws] onSend:Failed session_id={session_id} error={e}")
+
+    def _get_recent_messages(self, session_id: str, agent_id: Optional[str], rounds: int = 10) -> List[Dict[str, Any]]:
+        if not agent_id:
+            return []
+        ctx = get_context_manager().get_latest(session_id, agent_id)
+        if not ctx or not ctx.messages:
+            return []
+        max_messages = rounds * 2
+        filtered = [m for m in ctx.messages if isinstance(m, dict) and m.get("role") in {"user", "assistant"}]
+        if len(filtered) <= max_messages:
+            return filtered
+        return filtered[-max_messages:]

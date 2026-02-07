@@ -1,6 +1,5 @@
 {
   "agent_id": "fast_agent_v1",
-  "name": "fast_agent",
   "version": "1.0",
   "agent_type": "combined",
   "work_flow_type": "test",

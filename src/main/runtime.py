@@ -11,8 +11,10 @@ logger = get_logger()
 
 
 class RuntimeSession:
-    def __init__(self, session_id: str, plugin_config: Dict[str, Any] = None):
+    def __init__(self, session_id: str, plugin_config: Dict[str, Any] = None, agent_id: Optional[str] = None, avatar_url: Optional[str] = None):
         self.session_id = session_id
+        self.agent_id = agent_id
+        self.avatar_url = avatar_url
         self.ws = get_ws_manager()
         self.created_at = datetime.now()
 

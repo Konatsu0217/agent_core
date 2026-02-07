@@ -4,7 +4,8 @@ import json
 import time
 import uuid
 import uvicorn
-from fastapi import FastAPI, WebSocket
+from fastapi import FastAPI, WebSocket, HTTPException, Body
+from typing import Any, Dict
 from contextlib import asynccontextmanager
 
 from starlette.middleware.cors import CORSMiddleware
@@ -23,6 +24,7 @@ from src.domain.events import (
     DetachSessionPayload,
     DeleteSessionPayload,
 )
+from src.agent.storage.sqlite_agent_profile_storage import SQLiteAgentProfileStorage
 from src.infrastructure.config.config_manager import ConfigManager
 from src.infrastructure.utils.connet_manager import get_ws_manager
 from src.main.session_orchestrator import SessionOrchestrator
@@ -58,12 +60,18 @@ async def lifespan(app: FastAPI):
 
     # 注册默认agent
     from src.agent.agent_factory import AgentFactory
-    default_agent = await AgentFactory.get_basic_agent()
+    agent_profile_storage = SQLiteAgentProfileStorage()
+    basic_profile = await AgentFactory.get_basic_agent_profile()
+    basic_profile.pop("name", None)
+    if basic_profile.get("agent_id") and not agent_profile_storage.exists(basic_profile["agent_id"]):
+        agent_profile_storage.create(basic_profile["agent_id"], basic_profile, basic_profile.get("avatar_url"))
+    default_agent = AgentFactory.create_agent(basic_profile)
     workflow_engine.register_agent(default_agent)
 
     # 创建编排器
     orchestrator = SessionOrchestrator(
-        workflow_engine=workflow_engine
+        workflow_engine=workflow_engine,
+        agent_profile_storage=agent_profile_storage,
     )
 
     # 注册插件
@@ -72,6 +80,7 @@ async def lifespan(app: FastAPI):
 
     app.state.orchestrator = orchestrator
     app.state.ws_manager = ws_manager
+    app.state.agent_profile_storage = agent_profile_storage
 
     yield
 
@@ -95,6 +104,41 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+@app.post("/api/agent/profile")
+async def upload_agent_profile(payload: Dict[str, Any] = Body(...)):
+    agent_profile = payload.get("agent_profile") if isinstance(payload, dict) and "agent_profile" in payload else payload
+    agent_profile = agent_profile or {}
+    agent_profile.pop("name", None)
+    agent_id = agent_profile.get("agent_id")
+    if not agent_id:
+        raise HTTPException(status_code=400, detail="missing_agent_id")
+    storage = app.state.agent_profile_storage
+    storage.create(agent_id, agent_profile, agent_profile.get("avatar_url"))
+    return {"agent_id": agent_id, "status": "upserted"}
+
+
+def _redact_profile(profile: Dict[str, Any]) -> Dict[str, Any]:
+    cleaned = dict(profile)
+    backbone = cleaned.get("backbone_llm_config")
+    if isinstance(backbone, dict):
+        backbone = dict(backbone)
+        if "openapi_key" in backbone:
+            backbone["openapi_key"] = ""
+        if "api_key" in backbone:
+            backbone["api_key"] = ""
+        cleaned["backbone_llm_config"] = backbone
+    return cleaned
+
+
+@app.get("/api/agent/profile/{agent_id}")
+async def get_agent_profile(agent_id: str):
+    storage = app.state.agent_profile_storage
+    profile = storage.get(agent_id)
+    if not profile:
+        raise HTTPException(status_code=404, detail="agent_id_not_found")
+    return _redact_profile(profile)
 
 
 def _build_client_payload(event_type: ClientEventType, payload: dict, session_id: str):
@@ -164,6 +208,7 @@ def _parse_client_event(message: dict) -> ClientEventEnvelope:
 async def websocket_endpoint(websocket: WebSocket):
     await websocket.accept()
     orchestrator = app.state.orchestrator
+    storage = app.state.agent_profile_storage
     session_id = None
     client = websocket.client
     client_addr = f"{client.host}:{client.port}" if client else "unknown"
@@ -178,6 +223,12 @@ async def websocket_endpoint(websocket: WebSocket):
             except Exception as e:
                 logger.warning(f"ws_message_parse_failed client={client_addr} error={e}")
                 continue
+            if envelope.type == ClientEventType.INIT_SESSION:
+                agent_id = getattr(envelope.payload, "agent_id", None)
+                if not agent_id or not storage.get(agent_id):
+                    logger.warning(f"ws_invalid_agent_id client={client_addr} agent_id={agent_id}")
+                    await websocket.close(code=1008)
+                    break
             session_id = envelope.session_id
             await get_ws_manager().cache_websocket(session_id, websocket)
             logger.info(
