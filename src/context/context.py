@@ -12,6 +12,7 @@ class Context:
     messages: List[Dict[str, Any]] = field(default_factory=list) # 持续维护除了prompt以外的所有上下文
     tools: List[Dict[str, Any]] = field(default_factory=list)
     memory: str = field(default_factory=str)
+    schedule: str = field(default_factory=str)
     session: Optional[Dict[str, Any]] = None # 暂时没有用了，先占位吧
     session_metadata: Dict[str, Any] = field(default_factory=dict) # 消息发送时间之类的
     system_prompt: Optional[str] = None

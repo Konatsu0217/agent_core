@@ -24,8 +24,22 @@ class TimeAugmenter(AbsAugmenter):
     def build_extraInfo(self):
         return f'当前时间: {datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")}'
 
+class ScheduleAugmenter(AbsAugmenter):
+    def __init__(self,schedule: str, **kwargs):
+        super().__init__("schedule_augmenter", **kwargs)
+        self.schedule = schedule
+
+    def build_extraInfo(self):
+        return self.schedule + " 请根据日程表调整你的回复"
+
+    async def augment(self, context, **kwargs):
+        context.schedule = self.schedule
+        return context
+
+
 REGISTRY: Dict[str, type] = {
     "time_augmenter": TimeAugmenter,
+    "schedule_augmenter": ScheduleAugmenter,
 }
 
 

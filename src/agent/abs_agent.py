@@ -1,10 +1,14 @@
 import asyncio
 import json
 from abc import ABC, abstractmethod
+from datetime import datetime
 from enum import Enum
+from pyexpat.errors import messages
 from typing import Any, Dict, Coroutine, Optional
 
 from global_statics import logger
+from src.context import context_maker
+from src.context.augmenters import ScheduleAugmenter
 from src.context.context import Context
 from src.context.manager import get_context_manager
 from src.domain.agent_data_models import AgentRequest
@@ -58,6 +62,9 @@ async def run_llm_with_tools(llm_client, context: Context, pipe: ProcessPipe | N
     if memory_content:
         messages.append({"role": "assistant", "content": memory_content})
     messages.extend(context.messages)
+
+    if context.schedule:
+        messages.append({"role": "system", "content": f"你需要参考日程表中的行动安排回答，忙碌时允许表示当前忙碌，当前日程表: {context.schedule}"})
 
     asyncio.create_task(_log_token_estimate(messages, getattr(llm_client, "model_name", None)))
 
@@ -251,7 +258,20 @@ class BaseAgent(IBaseAgent, ServiceAwareAgent):
 
     async def initialize(self):
         """初始化 Agent"""
-        pass
+        for argument in self.agent_profile.get("augmenters", []):
+            if argument["name"] == "schedule_augmenter":
+                request = AgentRequest(
+                    session_id="init",
+                    query=f"当前时间为{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}，请创建你今天的日程表，按30分钟为一个tick，只需要给出日程时间安排不需要任何额外描述"
+                )
+                await self.build_real_messages_and_tool(request)
+                messages = [{"role": "system", "content": self.context.system_prompt},
+                            {"role": "user", "content": request.query}]
+                res = await self.backbone_llm_client.chat_completion(messages)
+                self.context_maker.add_augmenter(ScheduleAugmenter(schedule=res["choices"][0]["message"]["content"]))
+                self.context = None
+        logger.info("[LLM] agent初始化完毕")
+
 
     async def process(self, request, pipe: ProcessPipe) -> None:
         """处理用户请求"""

@@ -31,7 +31,6 @@ async def agent_factory():
     print("=== 测试 1: 创建基础Fast Agent===")
     basic_agent = await AgentFactory.get_basic_agent()
     print(f"Agent 类型: {type(basic_agent).__name__}")
-    print(f"Agent 名称: {basic_agent.name}")
     print(f"是否使用工具: {basic_agent.use_tools}")
     print(f"工作流类型: {basic_agent.work_flow_type}")
     print(f"输出格式: {basic_agent.output_format}")
