@@ -38,12 +38,12 @@ class RuntimeSession:
         self.pipe = ProcessPipe()
         return self.pipe
 
-    def release(self):
+    async def release(self):
         logger.info(f"runtime_session_release session_id={self.session_id}")
         self.event_bus.unsubscribe_all()
         self.buffer = []
         if self.pipe:
-            self.pipe.close()
+            await self.pipe.close()
             self.pipe = None
         if self.current_task and not self.current_task.done():
             self.current_task.cancel()
@@ -51,11 +51,11 @@ class RuntimeSession:
         self.current_request_id = None
         self.pending_query_text = None
 
-    def delete(self):
+    async def delete(self):
         """删除会话，完全删除不可复原"""
         logger.info(f"runtime_session_delete session_id={self.session_id}")
         get_context_manager().clear_session(self.session_id)
-        self.release()
+        await self.release()
 
 
 class EventBus:
