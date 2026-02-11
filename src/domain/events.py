@@ -29,6 +29,8 @@ class ServerEventType(str, Enum):
     USAGE = "usage"
     STATE = "state"
     # TTS
+    AGENT_TTS_AUDIO_DELTA = "audio_delta"
+    AGENT_EXPRESSION_DELTA = "expression_delta"
 
 
 @dataclass
@@ -159,6 +161,20 @@ class StatePayload:
     avatar_url: Optional[str] = None
 
 
+@dataclass
+class AudioDeltaPayload:
+    audio: str
+    text: Optional[str] = None
+    end: bool = False
+
+
+@dataclass
+class ExpressionDeltaPayload:
+    action: Optional[str] = None
+    expression: Optional[str] = None
+    intensity: Optional[float] = None
+
+
 ServiceEventPayload = Union[
     TextDeltaPayload,
     ThinkDeltaPayload,
@@ -170,6 +186,8 @@ ServiceEventPayload = Union[
     ErrorPayload,
     UsagePayload,
     StatePayload,
+    AudioDeltaPayload,
+    ExpressionDeltaPayload,
 ]
 
 

@@ -1,5 +1,6 @@
 import asyncio
 import json
+import re
 from abc import ABC, abstractmethod
 from datetime import datetime
 from enum import Enum
@@ -426,6 +427,9 @@ class ToolUsingAgent(BaseAgent):
                 return None
             if pipe:
                 await pipe.final_text(final_answer or "")
+                # 过滤各种标签 [xxx] 和 {xxx}
+                final_answer = re.sub(r'\[.*?\]', '', final_answer)
+                final_answer = re.sub(r'\{.*?\}', '', final_answer)
                 self.context.messages.append({"role": "assistant", "content": final_answer})
             return final_answer
 

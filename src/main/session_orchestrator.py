@@ -1,8 +1,10 @@
 # orchestrator/session_orchestrator.py
 import asyncio
+import base64
+import re
 import uuid
 import dataclasses
-from typing import Dict, Optional
+from typing import Dict, Optional, List
 from datetime import datetime
 
 from src.coordinator.work_flow_engine import WorkflowEngine
@@ -11,7 +13,7 @@ from src.domain.events import (
     ServiceEventEnvelope, ServerEventType, StatePayload, ClientEventType, ClientEventEnvelope,
     ClientEventPayload, ServiceEventPayload, HeartbeatPayload, TextDeltaPayload, ThinkDeltaPayload,
     ToolCallPayload, ToolResultPayload, FinalPayload, ApprovalRequiredPayload, ApprovalDecisionPayload,
-    ErrorPayload, ToolApprovalPayload
+    ErrorPayload, ToolApprovalPayload, AudioDeltaPayload, ExpressionDeltaPayload
 )
 from src.agent.agent_factory import AgentFactory
 from src.agent.storage.sqlite_agent_profile_storage import SQLiteAgentProfileStorage
@@ -21,6 +23,90 @@ from src.main.runtime import RuntimeSession
 from src.infrastructure.logging.logger import get_logger
 
 logger = get_logger()
+
+EXPRESSION_PATTERN = re.compile(r'\[(?P<type>name|expr|expression|intensity):(?P<value>[^\]]+)\]')
+
+
+class ExpressionParser:
+    """流式表达式解析器 - 遇到 [ 开始缓冲，遇到 ] 解析并发送动作"""
+
+    def __init__(self):
+        self.motion_buffer: str = ""
+        self.is_buffering: bool = False
+
+    def parse(self, chunk: str) -> tuple[str, List[Dict]]:
+        """
+        解析文本块
+        :return: (需要发送的文本, 动作表达式列表)
+        """
+        text_parts = []
+        expressions = []
+        i = 0
+
+        while i < len(chunk):
+            char = chunk[i]
+
+            if char == '[' and not self.is_buffering:
+                self.is_buffering = True
+                self.motion_buffer = '['
+                i += 1
+                continue
+
+            if self.is_buffering:
+                self.motion_buffer += char
+                if char == ']':
+                    self.is_buffering = False
+                    match = EXPRESSION_PATTERN.match(self.motion_buffer)
+                    if match:
+                        tag_type = match.group("type")
+                        tag_value = match.group("value")
+
+                        if tag_type in ("name", "action"):
+                            expressions.append({"action": tag_value})
+                        elif tag_type in ("expr", "expression"):
+                            expressions.append({"expression": tag_value})
+                        elif tag_type == "intensity":
+                            try:
+                                expressions.append({"intensity": float(tag_value)})
+                            except ValueError:
+                                pass
+                    self.motion_buffer = ""
+                i += 1
+                continue
+
+            text_parts.append(char)
+            i += 1
+
+        return "".join(text_parts), expressions
+
+    def flush(self) -> tuple[str, List[Dict]]:
+        """
+        刷新未完成的缓冲区
+        :return: (剩余文本, 动作表达式列表)
+        """
+        text = ""
+        expressions = []
+
+        if self.is_buffering and self.motion_buffer:
+            match = EXPRESSION_PATTERN.match(self.motion_buffer)
+            if match:
+                tag_type = match.group("type")
+                tag_value = match.group("value")
+                if tag_type in ("name", "action"):
+                    expressions.append({"action": tag_value})
+                elif tag_type in ("expr", "expression"):
+                    expressions.append({"expression": tag_value})
+                elif tag_type == "intensity":
+                    try:
+                        expressions.append({"intensity": float(tag_value)})
+                    except ValueError:
+                        pass
+            else:
+                text = self.motion_buffer
+
+        self.motion_buffer = ""
+        self.is_buffering = False
+        return text, expressions
 
 class SessionOrchestrator:
     """会话编排器 - 只负责连接、转发、插件触发"""
@@ -312,8 +398,9 @@ class SessionOrchestrator:
         1. 发送到客户端 (WS)
         2. 发布到内部事件总线 (EventBus)
         """
-        session.buffer = []
-        session.sendBuffer = []
+        session.buffer = ""
+        session.sendBuffer = ""
+        expression_parser = ExpressionParser()
         logger.info(f"[pipe] onConsume:Start session_id={session.session_id} request_id={request_id}")
 
         async for event in pipe.reader():
@@ -322,15 +409,40 @@ class SessionOrchestrator:
             
             # 映射事件内容到 ServiceEventPayload
             if event["type"] == "text_delta":
-                chunk = event["payload"].get("text", "")
-                session.buffer.append(chunk)
-                event_payload = TextDeltaPayload(text=chunk)
+                raw_chunk = event["payload"].get("text", "")
+                clean_text, expressions = expression_parser.parse(raw_chunk)
+
+                if clean_text:
+                    session.buffer += clean_text
+                    await self._send_event(session.session_id, ServiceEventEnvelope(
+                        session_id=session.session_id,
+                        event_id=str(uuid.uuid4()),
+                        type=ServerEventType.AGENT_TEXT_DELTA,
+                        ts=datetime.now().timestamp(),
+                        source="agent",
+                        payload=TextDeltaPayload(text=clean_text)
+                    ))
+
+                for expr in expressions:
+                    await self._send_event(session.session_id, ServiceEventEnvelope(
+                        session_id=session.session_id,
+                        event_id=str(uuid.uuid4()),
+                        type=ServerEventType.AGENT_EXPRESSION_DELTA,
+                        ts=datetime.now().timestamp(),
+                        source="agent",
+                        payload=ExpressionDeltaPayload(
+                            action=expr.get("action"),
+                            expression=expr.get("expression"),
+                            intensity=expr.get("intensity")
+                        )
+                    ))
                 
             elif event["type"] == "think_delta":
                 chunk = event["payload"].get("text", "")
                 event_payload = ThinkDeltaPayload(text=chunk)
 
             elif event["type"] == "tool_call":
+                asyncio.create_task(self._handle_buffered_tts(session, request_id))
                 event_payload = ToolCallPayload(
                     name=event["payload"].get("name"),
                     arguments=event["payload"].get("arguments")
@@ -344,6 +456,23 @@ class SessionOrchestrator:
                 )
                 
             elif event["type"] == "final":
+                remaining_text, remaining_exprs = expression_parser.flush()
+                if remaining_text:
+                    session.buffer += remaining_text
+                for expr in remaining_exprs:
+                    await self._send_event(session.session_id, ServiceEventEnvelope(
+                        session_id=session.session_id,
+                        event_id=str(uuid.uuid4()),
+                        type=ServerEventType.AGENT_EXPRESSION_DELTA,
+                        ts=datetime.now().timestamp(),
+                        source="agent",
+                        payload=ExpressionDeltaPayload(
+                            action=expr.get("action"),
+                            expression=expr.get("expression"),
+                            intensity=expr.get("intensity")
+                        )
+                    ))
+                asyncio.create_task(self._handle_buffered_tts(session, request_id, is_final=True))
                 event_payload = FinalPayload(
                     text=event["payload"].get("text", ""),
                     structured=event["payload"].get("structured")
@@ -461,6 +590,7 @@ class SessionOrchestrator:
             "approval_decision": ServerEventType.AGENT_APPROVAL_DECISION,
             "final": ServerEventType.FINAL,
             "error": ServerEventType.ERROR,
+            "expression_delta": ServerEventType.AGENT_EXPRESSION_DELTA,
         }
         return event_map.get(event_type, ServerEventType.ERROR)
 
@@ -472,7 +602,8 @@ class SessionOrchestrator:
                 ServerEventType.FINAL,
                 ServerEventType.ERROR,
                 ServerEventType.AGENT_APPROVAL_REQUIRED,
-                ServerEventType.AGENT_APPROVAL_DECISION
+                ServerEventType.AGENT_APPROVAL_DECISION,
+                ServerEventType.AGENT_EXPRESSION_DELTA
             }:
                 logger.info(
                     f"[ws] onSend:Event session_id={session_id} event_type={envelope.type} event_id={envelope.event_id}"
@@ -482,3 +613,48 @@ class SessionOrchestrator:
             await self.ws.send_event_to(session_id, data)
         except Exception as e:
             logger.exception(f"[ws] onSend:Failed session_id={session_id} error={e}")
+
+    async def _handle_buffered_tts(self, session: RuntimeSession, request_id: str, is_final: bool = False):
+        """
+        处理缓冲区中的文本，生成TTS音频并发送给前端
+        """
+        if not session.buffer:
+            return
+
+        text = session.buffer
+        session.buffer = ""
+
+        try:
+            logger.info(f"[tts] onHandleBuffer: session_id={session.session_id} text_len={len(text)} is_final={is_final}")
+            async for audio_chunk in session.tts_handler.handle_tts_for_chunk(text):
+                if audio_chunk:
+                    audio_base64 = base64.b64encode(audio_chunk).decode('utf-8')
+                    await self._send_event(session.session_id, ServiceEventEnvelope(
+                        session_id=session.session_id,
+                        event_id=str(uuid.uuid4()),
+                        type=ServerEventType.AGENT_TTS_AUDIO_DELTA,
+                        ts=datetime.now().timestamp(),
+                        source="agent",
+                        payload=AudioDeltaPayload(
+                            audio=audio_base64,
+                            end=False
+                        )
+                    ))
+            if is_final:
+                await self._send_event(session.session_id, ServiceEventEnvelope(
+                    session_id=session.session_id,
+                    event_id=str(uuid.uuid4()),
+                    type=ServerEventType.AGENT_TTS_AUDIO_DELTA,
+                    ts=datetime.now().timestamp(),
+                    source="agent",
+                    payload=AudioDeltaPayload(
+                        audio="",
+                        text=text,
+                        end=True
+                    )
+                ))
+                logger.info(f"[tts] onFinal: session_id={session.session_id} done")
+
+            session.buffer = ""
+        except Exception as e:
+            logger.exception(f"[tts] onHandleBuffer:Failed session_id={session.session_id} error={e}")
