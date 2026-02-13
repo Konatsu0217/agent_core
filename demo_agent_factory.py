@@ -42,7 +42,7 @@ async def agent_factory():
 
     # 测试处理请求
     test_request = AgentRequest(
-        query=f"我喜欢喝冰咖啡",
+        query=f"我喜欢喝冰咖啡，帮我推荐几款适合做冰咖啡的豆子，输出到txt里",
         session_id="test_session_123"
     )
 
