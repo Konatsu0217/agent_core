@@ -13,7 +13,7 @@ async def run_all():
 
     env = os.environ.copy()
     env["CORE_CONFIG_FILE"] = str(CONFIG_DIR / "core.json")
-    env["MCP_CONFIG_FILE"] = str(CONFIG_DIR / "mcp_servers.json")
+    env["MCP_CONFIG_FILE"] = str(CONFIG_DIR / "mcp_server.json")
     env["APP_LOG_DIR"] = str(BASE_DIR / "logs")
 
     logger = get_logger()
@@ -32,7 +32,7 @@ async def run_all():
         time.sleep(3)
 
         mcp_hub_service = subprocess.Popen(
-        ["python3", "tools/mcp_hub/mcp_center_server.py", "--config", str(CONFIG_DIR / "mcp_servers.json")],
+        ["python3", "tools/mcp_hub/mcp_center_server.py", "--config", str(CONFIG_DIR / "mcp_server.json")],
         cwd=str(BASE_DIR), env=env)
 
         logger.info("mcp_hub_service 已启动")

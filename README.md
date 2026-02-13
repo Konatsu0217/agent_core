@@ -2,18 +2,8 @@
 
 ### 1. 环境准备
 
-确保已安装 Python 3.10+ 和 Node.js。
+python 3.12, 
 
-安装 Python 依赖：
-```bash
-pip install -r requirements.txt
-```
-
-安装前端依赖：
-```bash
-cd webUI
-npm install
-```
 
 ### 2. 配置说明
 
@@ -41,7 +31,4 @@ python run_all.py
 
 ## RoadMap
 
-- [x] 重构项目目录结构，提升模块化程度。
-- [x] 整合 MCP Hub 工具管理。
-- [ ] 接入视觉能力。
-- [ ] Agent 路由化。
+| 再说吧（
