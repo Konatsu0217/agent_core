@@ -3,6 +3,7 @@ from datetime import datetime
 from typing import Dict, Any, Optional
 
 from src.context.manager import get_context_manager
+from src.infrastructure.handlers.tts_handler import TTSHandler
 from src.infrastructure.utils.connet_manager import get_ws_manager
 from src.infrastructure.utils.pipe import ProcessPipe
 from src.infrastructure.logging.logger import get_logger
@@ -11,7 +12,8 @@ logger = get_logger()
 
 
 class RuntimeSession:
-    def __init__(self, session_id: str, plugin_config: Dict[str, Any] = None, agent_id: Optional[str] = None, avatar_url: Optional[str] = None):
+    def __init__(self, session_id: str, plugin_config: Dict[str, Any] = None, agent_id: Optional[str] = None,
+                 avatar_url: Optional[str] = None):
         self.session_id = session_id
         self.agent_id = agent_id
         self.avatar_url = avatar_url
@@ -23,6 +25,8 @@ class RuntimeSession:
         self.current_request_id = None
         self.pending_query_text = None
 
+        self.tts_handler = TTSHandler()
+
         # 会话的配置
         self.RuntimeSessionConfig = plugin_config
 
@@ -30,20 +34,20 @@ class RuntimeSession:
         self.event_bus = EventBus()
 
         # 缓冲区
-        self.buffer = []
-        self.sendBuffer = []
+        self.buffer = ""
+        self.sendBuffer = ""
         logger.info(f"runtime_session_created session_id={session_id} and agent_id={agent_id}")
 
     def createPipe(self) -> ProcessPipe:
         self.pipe = ProcessPipe()
         return self.pipe
 
-    def release(self):
+    async def release(self):
         logger.info(f"runtime_session_release session_id={self.session_id}")
         self.event_bus.unsubscribe_all()
         self.buffer = []
         if self.pipe:
-            self.pipe.close()
+            await self.pipe.close()
             self.pipe = None
         if self.current_task and not self.current_task.done():
             self.current_task.cancel()
@@ -51,11 +55,11 @@ class RuntimeSession:
         self.current_request_id = None
         self.pending_query_text = None
 
-    def delete(self):
+    async def delete(self):
         """删除会话，完全删除不可复原"""
         logger.info(f"runtime_session_delete session_id={self.session_id}")
         get_context_manager().clear_session(self.session_id)
-        self.release()
+        await self.release()
 
 
 class EventBus:

@@ -4,7 +4,7 @@ import json
 import time
 import uuid
 import uvicorn
-from fastapi import FastAPI, WebSocket, HTTPException, Body
+from fastapi import FastAPI, WebSocket, HTTPException, Body, Query
 from typing import Any, Dict
 from contextlib import asynccontextmanager
 
@@ -109,15 +109,19 @@ app.add_middleware(
 
 @app.post("/api/agent/profile")
 async def upload_agent_profile(payload: Dict[str, Any] = Body(...)):
+    start_time = time.time()
     agent_profile = payload.get("agent_profile") if isinstance(payload, dict) and "agent_profile" in payload else payload
     agent_profile = agent_profile or {}
     agent_profile.pop("name", None)
     agent_id = agent_profile.get("agent_id")
+    logger.info(f"[api] POST /api/agent/profile agent_id={agent_id}")
     if not agent_id:
+        logger.warning(f"[api] POST /api/agent/profile missing_agent_id")
         raise HTTPException(status_code=400, detail="missing_agent_id")
     storage = app.state.agent_profile_storage
     existing = storage.get(agent_id)
     if existing and existing.get("client_readable") is False:
+        logger.warning(f"[api] POST /api/agent/profile agent_id={agent_id} agent_profile_not_overwritable")
         raise HTTPException(status_code=403, detail="agent_profile_not_overwritable")
     base = None
     if existing:
@@ -131,6 +135,8 @@ async def upload_agent_profile(payload: Dict[str, Any] = Body(...)):
         from src.agent.agent_factory import AgentFactory
         agent = AgentFactory.create_agent(merged)
         engine.register_agent(agent)
+    elapsed = time.time() - start_time
+    logger.info(f"[api] POST /api/agent/profile agent_id={agent_id} status=upserted elapsed={elapsed:.3f}s")
     return {"agent_id": agent_id, "status": "upserted"}
 
 
@@ -192,26 +198,56 @@ def _preserve_api_keys(existing: Dict[str, Any] | None, incoming: Dict[str, Any]
 
 @app.get("/api/agent/profile/{agent_id}")
 async def get_agent_profile(agent_id: str):
+    start_time = time.time()
+    logger.info(f"[api] GET /api/agent/profile/{agent_id}")
     storage = app.state.agent_profile_storage
     profile = storage.get(agent_id)
     if not profile:
+        elapsed = time.time() - start_time
+        logger.warning(f"[api] GET /api/agent/profile/{agent_id} agent_id_not_found elapsed={elapsed:.3f}s")
         raise HTTPException(status_code=404, detail="agent_id_not_found")
     if profile.get("client_readable") is False:
+        elapsed = time.time() - start_time
+        logger.warning(f"[api] GET /api/agent/profile/{agent_id} agent_profile_not_readable elapsed={elapsed:.3f}s")
         raise HTTPException(status_code=403, detail="agent_profile_not_readable")
+    elapsed = time.time() - start_time
+    logger.info(f"[api] GET /api/agent/profile/{agent_id} status=success elapsed={elapsed:.3f}s")
     return _redact_profile(profile)
 
 
 @app.get("/api/session/{session_id}/messages")
 async def get_session_messages(session_id: str, agent_id: str, limit: int = 20):
+    start_time = time.time()
+    logger.info(f"[api] GET /api/session/{session_id}/messages agent_id={agent_id} limit={limit}")
     if limit <= 0:
         limit = 20
     if limit > 200:
         limit = 200
     ctx = get_context_manager().get_latest(session_id, agent_id)
     if not ctx:
+        elapsed = time.time() - start_time
+        logger.info(f"[api] GET /api/session/{session_id}/messages status=no_messages elapsed={elapsed:.3f}s")
         return {"session_id": session_id, "agent_id": agent_id, "messages": []}
     filtered = [m for m in (ctx.messages or []) if isinstance(m, dict) and m.get("role") in {"user", "assistant"}]
+    elapsed = time.time() - start_time
+    logger.info(f"[api] GET /api/session/{session_id}/messages count={len(filtered)} elapsed={elapsed:.3f}s")
     return {"session_id": session_id, "agent_id": agent_id, "messages": filtered[-limit:]}
+
+
+@app.post("/api/session/delete")
+async def delete_session(session_id: str = Query(...), agent_id: str = Query(None)):
+    start_time = time.time()
+    logger.info(f"[api] DELETE /api/session/{session_id} agent_id={agent_id}")
+    from src.infrastructure.clients.session_manager import get_session_manager
+    session_manager = get_session_manager()
+    success = await session_manager.delete_session(session_id, agent_id)
+    elapsed = time.time() - start_time
+    if success:
+        logger.info(f"[api] DELETE /api/session/{session_id} agent_id={agent_id} status=success elapsed={elapsed:.3f}s")
+        return {"session_id": session_id, "status": "deleted"}
+    else:
+        logger.warning(f"[api] DELETE /api/session/{session_id} agent_id={agent_id} status=not_found elapsed={elapsed:.3f}s")
+        raise HTTPException(status_code=404, detail="session_not_found")
 
 
 def _build_client_payload(event_type: ClientEventType, payload: dict, session_id: str):

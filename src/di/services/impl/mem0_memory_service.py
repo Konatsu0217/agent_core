@@ -23,6 +23,7 @@ class Mem0MemoryService(IMemoryService):
     async def search(self, query: str, user_id: str, **kwargs) -> List[Dict[str, Any]]:
         """搜索记忆"""
         limit = kwargs.get("limit", 5)
+        logger.info(f"[Mem0] search memory with query: {query}, user_id: {user_id}, limit: {limit}")
         try:
             return await self.mem.search(query=query, user_id=user_id, limit=limit)
         except Exception as e:
@@ -32,3 +33,4 @@ class Mem0MemoryService(IMemoryService):
     async def add(self, messages: List[Dict[str, Any]], user_id: str) -> None:
         """添加记忆"""
         await asyncio.to_thread(self.mem.add, messages, user_id)
+        logger.info("[Mem0] add memory success")

@@ -100,9 +100,8 @@ class DefaultContextMaker(IContextMaker):
         
         # 增强上下文
         self._load_augmenters_from_profile()
-        for augmenter in self.augmenters:
-            context = await augmenter.augment(context, **kwargs)
-        
+        await self.augment_context(context, **kwargs)
+
         return context
     
     async def _build_prompt_and_tools(self, context: Context, **kwargs):
