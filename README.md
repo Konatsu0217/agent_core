@@ -1,34 +1,3 @@
-## 快速开始
-
-### 1. 环境准备
-
-python 3.12, 
-
-
-### 2. 配置说明
-
-1.  在项目根目录下创建 `api.key` 文件，配置你的 LLM 供应商 API Key：
-    ```json
-    {
-        "openapi_key": "your-api-key"
-    }
-    ```
-2.  检查 `config/` 目录下的各项 JSON 配置文件，根据需要修改端口或服务地址。
-
-### 3. 启动项目
-
-使用一键启动脚本，它将自动启动 MCP Hub、PE Server、主服务以及前端界面：
-```bash
-python run_all.py
-```
-
-启动后：
--   **主服务**: [http://localhost:8000](http://localhost:8000)
--   **前端界面**: [http://localhost:5174](http://localhost:5174) (默认)
--   **MCP Hub**: [http://localhost:9000](http://localhost:9000)
--   **PE Server**: [http://localhost:8001](http://localhost:8001)
-
-
-## RoadMap
-
-| 再说吧（
+同质化过于严重
+练手、学习项目
+请移步
