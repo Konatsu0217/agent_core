@@ -134,3 +134,5 @@ test_*.py
 
 scripts/
 src/agent/agent_profiles/*_agent_profile.json
+
+client/
