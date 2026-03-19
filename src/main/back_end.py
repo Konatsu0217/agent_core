@@ -31,6 +31,9 @@ from src.main.session_orchestrator import SessionOrchestrator
 from src.infrastructure.clients.bilibili_live_client.danmaku_bridge import (
     init_danmaku_bridge, get_danmaku_bridge
 )
+from src.infrastructure.clients.bilibili_live_client.bili_hot_fetcher import (
+    init_hot_fetcher
+)
 from pydantic import BaseModel, Field
 from src.infrastructure.logging.logger import get_logger
 from src.context.manager import get_context_manager
@@ -100,12 +103,25 @@ async def lifespan(app: FastAPI):
             agent_id=danmaku_cfg.get('agent_id', 'fast_agent_v1'),
             bucket_capacity=danmaku_cfg.get('bucket_capacity', 20),
             bucket_lifetime=danmaku_cfg.get('bucket_lifetime', 8.0),
+            idle_timeout=danmaku_cfg.get('idle_timeout', 30.0),
+            hot_topic_interval=danmaku_cfg.get('hot_topic_interval', 600.0),
+            broadcast_session_id=danmaku_cfg.get('broadcast_session_id', 'danmaku_broadcast_1c31f6ad'),
         )
         danmaku_bridge.bind_orchestrator(orchestrator)
         ws_manager.register_broadcast_session(danmaku_bridge._broadcast_session_id)
+
+        # 初始化 B站热榜抓取器并绑定到桥接器
+        hot_fetcher = init_hot_fetcher(
+            refresh_interval=danmaku_cfg.get('hot_fetch_interval', 600.0),
+            page_size=20,
+        )
+        await hot_fetcher.start()
+        danmaku_bridge.bind_hot_fetcher(hot_fetcher)
+        app.state.hot_fetcher = hot_fetcher
+
         await danmaku_bridge.start()
         app.state.danmaku_bridge = danmaku_bridge
-        logger.info("弹幕桥接模块已启用并启动")
+        logger.info("弹幕桥接模块已启用（冷场兜底 + B站热榜注入）")
 
         # 如果配置了 B站直播客户端，自动启动监听
         bili_cfg = danmaku_cfg.get('bili_live')
@@ -137,6 +153,8 @@ async def lifespan(app: FastAPI):
     yield
 
     # 清理
+    if hasattr(app.state, 'hot_fetcher'):
+        await app.state.hot_fetcher.stop()
     if hasattr(app.state, 'danmaku_bridge'):
         await app.state.danmaku_bridge.stop()
 

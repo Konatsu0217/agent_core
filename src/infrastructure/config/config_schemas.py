@@ -46,6 +46,9 @@ class DanmakuConfig(BaseModel):
     agent_id: str = Field(default="fast_agent_v1", description="弹幕消息使用的 agent ID")
     bucket_capacity: int = Field(default=20, ge=1, description="每个桶最大弹幕数")
     bucket_lifetime: float = Field(default=8.0, gt=0, description="桶的生命周期(秒)")
+    idle_timeout: float = Field(default=30.0, gt=0, description="冷场兜底阈值(秒)，无弹幕超过此时间主动发起话题")
+    hot_topic_interval: float = Field(default=600.0, gt=0, description="热点话题注入最小间隔(秒)")
+    hot_fetch_interval: float = Field(default=600.0, gt=0, description="B站热榜刷新间隔(秒)")
     bili_live: Optional[BiliLiveConfig] = Field(default=None, description="B站直播客户端配置(可选)")
 
 class CoreConfig(BaseModel):
