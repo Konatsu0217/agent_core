@@ -1,20 +1,34 @@
-# agent_core/client/mcp_hub_client.py
+"""
+MCPHubClient — enhanced with built-in skill support.
+
+Changes from original:
+  1. Integrates SkillRegistry for built-in tools (websearch, etc.)
+  2. get_tools() merges remote MCP tools + built-in skill schemas
+  3. call_tool() routes to built-in handler when tool name matches a skill
+  4. Transparent to callers — same API, zero behaviour change for remote tools
+"""
+
 import asyncio
 import json
-from typing import Any, Dict, List, AsyncGenerator, Optional
+import logging
+from typing import Any, AsyncGenerator, Dict, List, Optional
 
 import httpx
 
-from src.agent.abs_agent import IBaseAgent
+from src.skills.registry import SkillRegistry
+
+logger = logging.getLogger(__name__)
 
 
 class MCPHubClient:
     """
+    Unified tool gateway: remote MCP Hub + built-in skills.
+
     - GET  /mcp_hub/servers      -> get_servers()
-    - GET  /mcp_hub/tools        -> get_tools()
+    - GET  /mcp_hub/tools        -> get_tools()       (merged with built-in)
     - GET  /mcp_hub/health       -> health()
-    - POST /mcp_hub/call         -> call(tool, arguments)  (returns dict)
-    - POST /mcp_hub/call_stream  -> call_stream(tool, arguments) (yields chunks)
+    - POST /mcp_hub/call         -> call_tool()        (auto-routes built-in)
+    - POST /mcp_hub/call_stream  -> call_tool_stream()
     """
 
     def __init__(
@@ -23,6 +37,8 @@ class MCPHubClient:
         timeout: float = 30.0,
         max_retries: int = 2,
         backoff: float = 0.5,
+        *,
+        enable_builtin_skills: bool = True,
     ):
         self.base_url = base_url.rstrip("/")
         self._client = httpx.AsyncClient(timeout=timeout)
@@ -33,9 +49,25 @@ class MCPHubClient:
         self._servers_cache: Optional[List[Dict[str, Any]]] = None
         self._lock = asyncio.Lock()
 
-    # -----------------------
-    # helpers
-    # -----------------------
+        # ---- Built-in skills ----
+        self._skill_registry = SkillRegistry()
+        if enable_builtin_skills:
+            self._skill_registry.auto_register()
+            logger.info(
+                "Built-in skills loaded: %s", self._skill_registry.list_names()
+            )
+
+    # ==================================================================
+    # Properties
+    # ==================================================================
+    @property
+    def skill_registry(self) -> SkillRegistry:
+        """Expose registry for external registration if needed."""
+        return self._skill_registry
+
+    # ==================================================================
+    # Helpers
+    # ==================================================================
     async def _request_json(self, method: str, path: str, **kwargs) -> Any:
         url = f"{self.base_url}{path}"
         last_exc = None
@@ -51,9 +83,13 @@ class MCPHubClient:
                     continue
                 raise last_exc
 
-    # -----------------------
-    # servers / tools / health
-    # -----------------------
+    def _is_builtin(self, tool_name: str) -> bool:
+        """Check if a tool name maps to a built-in skill."""
+        return self._skill_registry.has(tool_name)
+
+    # ==================================================================
+    # Servers / Tools / Health
+    # ==================================================================
     async def get_servers(self, use_cache: bool = True) -> List[Dict[str, Any]]:
         if use_cache and self._servers_cache is not None:
             return self._servers_cache
@@ -65,26 +101,48 @@ class MCPHubClient:
 
     async def get_tools(self, use_cache: bool = True) -> List[Dict[str, Any]]:
         """
-        Returns the 'tools' list as the hub provides it.
+        Returns merged list: remote MCP tools + built-in skill schemas.
+        Built-in schemas are tagged with `"_builtin": True` for easy filtering.
         """
+        # 1. Remote tools
+        remote_tools: List[Dict[str, Any]] = []
         if use_cache and self._tools_cache is not None:
-            return self._tools_cache
-        data = await self._request_json("GET", "/mcp_hub/tools")
-        if isinstance(data, dict) and isinstance(data.get("tools"), list):
-            self._tools_cache = data["tools"]
-            return self._tools_cache
-        # some hubs may return list directly
-        if isinstance(data, list):
-            self._tools_cache = data
-            return data
-        return []
+            remote_tools = self._tools_cache
+        else:
+            try:
+                data = await self._request_json("GET", "/mcp_hub/tools")
+                if isinstance(data, dict) and isinstance(data.get("tools"), list):
+                    remote_tools = data["tools"]
+                elif isinstance(data, list):
+                    remote_tools = data
+            except Exception as e:
+                logger.warning("Failed to fetch remote tools, using built-in only: %s", e)
+            self._tools_cache = remote_tools
+
+        # 2. Built-in skill schemas (tagged)
+        builtin_schemas = []
+        for schema in self._skill_registry.list_schemas():
+            tagged = {**schema, "_builtin": True}
+            builtin_schemas.append(tagged)
+
+        # 3. Deduplicate: built-in wins if name collision
+        builtin_names = {s["function"]["name"] for s in builtin_schemas}
+        filtered_remote = [
+            t for t in remote_tools
+            if t.get("function", {}).get("name") not in builtin_names
+        ]
+
+        return builtin_schemas + filtered_remote
 
     async def health(self) -> Dict[str, Any]:
-        return await self._request_json("GET", "/mcp_hub/health")
+        hub_health = await self._request_json("GET", "/mcp_hub/health")
+        # Augment with built-in skill info
+        hub_health["builtin_skills"] = self._skill_registry.list_names()
+        return hub_health
 
-    # -----------------------
-    # tool call (normal)
-    # -----------------------
+    # ==================================================================
+    # Tool call (normal) — auto-routes built-in vs remote
+    # ==================================================================
     async def call_tool(
         self,
         tool: str,
@@ -92,23 +150,28 @@ class MCPHubClient:
         timeout: Optional[float] = None,
     ) -> Dict[str, Any]:
         """
-        Synchronous-style tool call (POST /hub/call).
-        Returns parsed JSON (dict) from the hub.
+        Call a tool by name. Automatically routes:
+          - Built-in skill  -> in-process execution
+          - Remote MCP tool -> POST /mcp_hub/call
         """
-        # Create payload in MCPToolCallRequest format
+        # ---- Built-in fast path ----
+        if self._is_builtin(tool):
+            logger.debug("Routing '%s' to built-in skill handler", tool)
+            return await self._skill_registry.call(tool, arguments)
+
+        # ---- Remote MCP hub ----
         payload = {
             "id": f"call_{hash(str(tool) + str(arguments))}",
             "type": "function",
             "function": {
                 "name": tool,
-                "arguments": arguments
-            }
+                "arguments": arguments,
+            },
         }
-        # allow override timeout per-call
         if timeout:
             payload["timeout"] = timeout
         return await self._request_json("POST", "/mcp_hub/call", json=payload)
-    
+
     async def approve_tool(
         self,
         tool: str,
@@ -116,19 +179,19 @@ class MCPHubClient:
         approval_id: str,
         timeout: Optional[float] = None,
     ) -> Dict[str, Any]:
-        """
-        Approve tool execution (POST /hub/approve).
-        Returns parsed JSON (dict) from the hub.
-        """
-        payload = {"tool": tool, "arguments": arguments, "approval_id": approval_id}
-        # allow override timeout per-call
+        """Approve tool execution (POST /mcp_hub/approve)."""
+        payload = {
+            "tool": tool,
+            "arguments": arguments,
+            "approval_id": approval_id,
+        }
         if timeout:
             payload["timeout"] = timeout
         return await self._request_json("POST", "/mcp_hub/approve", json=payload)
 
-    # -----------------------
-    # tool call (stream)
-    # -----------------------
+    # ==================================================================
+    # Tool call (stream)
+    # ==================================================================
     async def call_tool_stream(
         self,
         tool: str,
@@ -137,25 +200,31 @@ class MCPHubClient:
         chunk_timeout: Optional[float] = None,
     ) -> AsyncGenerator[Any, None]:
         """
-        Stream call: POST /hub/call_stream
-        Yields each JSON-decoded chunk (or raw line) as produced by hub.
-        This function does NOT interpret chunks — it forwards them raw.
+        Streaming tool call. Built-in skills return a single-chunk stream.
+        Remote tools proxy through POST /mcp_hub/call_stream.
         """
+        # ---- Built-in: wrap as single-chunk stream ----
+        if self._is_builtin(tool):
+            result = await self._skill_registry.call(tool, arguments)
+            yield result
+            return
+
+        # ---- Remote stream ----
         url = f"{self.base_url}/mcp_hub/call_stream"
-        # Create payload in MCPToolCallRequest format
         payload = {
             "id": f"call_{hash(str(tool) + str(arguments))}",
             "type": "function",
             "function": {
                 "name": tool,
-                "arguments": arguments
-            }
+                "arguments": arguments,
+            },
         }
-        # use a fresh client request so we can iterate response stream
         async with httpx.AsyncClient(timeout=self._client.timeout) as client:
             try:
-                # Send request and get streaming response
-                async with client.stream("POST", url, json=payload, timeout=chunk_timeout or self.timeout) as resp:
+                async with client.stream(
+                    "POST", url, json=payload,
+                    timeout=chunk_timeout or self.timeout,
+                ) as resp:
                     resp.raise_for_status()
                     async for raw_line in resp.aiter_lines():
                         if raw_line is None:
@@ -163,18 +232,16 @@ class MCPHubClient:
                         line = raw_line.strip()
                         if not line:
                             continue
-                        # try parse json, fallback to raw text
                         try:
                             yield json.loads(line)
                         except Exception:
                             yield line
             except Exception as e:
-                # stream errors are yielded as an error dict for consumer convenience
                 yield {"error": str(e)}
 
-    # -----------------------
-    # utilities
-    # -----------------------
+    # ==================================================================
+    # Utilities
+    # ==================================================================
     async def invalidate_cache(self):
         async with self._lock:
             self._tools_cache = None
@@ -183,7 +250,6 @@ class MCPHubClient:
     async def close(self):
         await self._client.aclose()
 
-    # Context manager support
     async def __aenter__(self):
         return self
 

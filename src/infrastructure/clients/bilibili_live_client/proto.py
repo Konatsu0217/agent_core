@@ -1,8 +1,18 @@
 import struct
-import zlib
+import json
 import logging
 
 logger = logging.getLogger(__name__)
+
+# 弹幕回调函数（由外部设置）
+_danmaku_callback = None
+
+
+def set_danmaku_callback(callback):
+    """设置弹幕回调函数，callback(cmd: str, data: dict)"""
+    global _danmaku_callback
+    _danmaku_callback = callback
+    logger.info("[proto] danmaku callback registered")
 
 
 class Proto:
@@ -37,17 +47,23 @@ class Proto:
         if self.packetLen < 0 or self.packetLen > self.maxBody:
             logger.warning(f"包体长不对 self.packetLen: {self.packetLen} self.maxBody: {self.maxBody}")
             return
-        if self.headerLen != self.headerLen:
-            logger.warning("包头长度不对")
-            return
         bodyLen = self.packetLen - self.headerLen
         self.body = buf[16:self.packetLen]
         if bodyLen <= 0:
             return
         if self.ver == 0:
-            # 这里做回调
-            logger.debug(f"====> callback: {self.body.decode('utf-8')}")
+            # 解析 JSON 消息体
+            try:
+                body_str = self.body.decode('utf-8') if isinstance(self.body, bytes) else self.body
+                body_json = json.loads(body_str)
+                cmd = body_json.get('cmd', '')
+
+                # 触发回调
+                if _danmaku_callback and cmd:
+                    _danmaku_callback(cmd, body_json.get('data', {}))
+
+                logger.debug(f"[proto] received: cmd={cmd}")
+            except (json.JSONDecodeError, UnicodeDecodeError) as e:
+                logger.debug(f"[proto] body parse failed: {e}")
         else:
             return
-
-# add_danmaku_inner(danmaku_data, danmaku_type)

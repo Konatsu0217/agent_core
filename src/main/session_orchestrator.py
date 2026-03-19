@@ -21,6 +21,7 @@ from src.infrastructure.utils.connet_manager import get_ws_manager
 from src.infrastructure.utils.pipe import ProcessPipe, AgentEvent
 from src.main.runtime import RuntimeSession
 from src.infrastructure.logging.logger import get_logger
+from src.infrastructure.utils.text_sanitizer import sanitize_text_for_tts
 
 logger = get_logger()
 
@@ -107,6 +108,7 @@ class ExpressionParser:
         self.motion_buffer = ""
         self.is_buffering = False
         return text, expressions
+
 
 class SessionOrchestrator:
     """会话编排器 - 只负责连接、转发、插件触发"""
@@ -302,9 +304,12 @@ class SessionOrchestrator:
 
         query_text = getattr(payload, 'text', '')
         if not getattr(session, "agent_id", None):
-            metadata = getattr(payload, "metadata", None) or {}
-            agent_id = metadata.get("agent_id") if isinstance(metadata, dict) else None
-            await self._ensure_agent(session, agent_id)
+            # 优先使用方法参数 agent_id，其次从 payload.metadata 取
+            resolved_agent_id = agent_id
+            if not resolved_agent_id:
+                metadata = getattr(payload, "metadata", None) or {}
+                resolved_agent_id = metadata.get("agent_id") if isinstance(metadata, dict) else None
+            await self._ensure_agent(session, resolved_agent_id)
         if session.current_task and not session.current_task.done():
             if session.pipe:
                 await session.pipe.close("request_cancelled")
@@ -623,6 +628,11 @@ class SessionOrchestrator:
 
         text = session.buffer
         session.buffer = ""
+
+        # 过滤颜文字/希腊字符等不适合 TTS 朗读的内容
+        text = sanitize_text_for_tts(text)
+        if not text:
+            return
 
         try:
             logger.info(f"[tts] onHandleBuffer: session_id={session.session_id} text_len={len(text)} is_final={is_final}")

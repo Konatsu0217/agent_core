@@ -1,28 +1,41 @@
 {
-  "server": {
-    "port": 38888,
-    "workers": 1,
-    "limit_concurrency": 50,
-    "backlog": 1024,
-    "reload": false,
-    "timeout_keep_alive": 5
-  },
-  "backbone_llm_config": {
-    "provider": "siliconflow",
-    "openapi_url": "https://api.siliconflow.cn/v1/chat/completions",
-    "openapi_key": "",
-    "model_name": "qwen3:8b",
-    "temperature": 1.2,
-    "max_tokens": 1024
-  },
-  "pe_config": {
-    "url": "ws://0.0.0.0:25535"
-  },
-  "rag_config": {
-    "url": "http://0.0.0.0:25536"
-  },
-  "mcphub_config": {
-    "url": "http://0.0.0.0",
-    "port": 9000
-  }
+    "server": {
+        "port": 38888,
+        "workers": 1,
+        "limit_concurrency": 50,
+        "backlog": 1024,
+        "reload": false,
+        "timeout_keep_alive": 5
+    },
+    "backbone_llm_config": {
+        "provider": "siliconflow",
+        "openapi_url": "https://api.siliconflow.cn/v1/chat/completions",
+        "openapi_key": "",
+        "model_name": "qwen3:8b",
+        "temperature": 1.2,
+        "max_tokens": 1024
+    },
+    "pe_config": {
+        "url": "ws://0.0.0.0:25535"
+    },
+    "rag_config": {
+        "url": "http://0.0.0.0:25536"
+    },
+    "mcphub_config": {
+        "url": "http://0.0.0.0",
+        "port": 9000
+    },
+    "danmaku_config": {
+        "enabled": true,
+        "agent_id": "fast_agent_v1",
+        "bucket_capacity": 20,
+        "bucket_lifetime": 6.0,
+        "bili_live": {
+            "id_code": "F27534V60V7K8",
+            "app_id": 1763749631788,
+            "key": "PfFpTGcyITmzupxActPWd8vs",
+            "secret": "ka8S6qhdBxOxQchNX80gbTvTpTnegn",
+            "host": "https://live-open.biliapi.com"
+        }
+    }
 }

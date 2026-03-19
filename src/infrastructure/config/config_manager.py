@@ -208,3 +208,10 @@ class ConfigManager:
         if config_key:
             return raw_config.get(config_key, {})
         return {}
+
+    @classmethod
+    def get_danmaku_config(cls):
+        """获取弹幕桥接配置"""
+        raw_config = cls.get_raw_config()
+        return raw_config.get('danmaku_config', None)
+

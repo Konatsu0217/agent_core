@@ -1,0 +1,19 @@
+{
+  "name": "agent-core-live2d-client",
+  "version": "0.1.0",
+  "description": "Live2D virtual streamer client for Agent Core backend",
+  "private": true,
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "pixi.js": "^6.5.10",
+    "pixi-live2d-display": "^0.4.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.4.0",
+    "vite": "^5.4.0"
+  }
+}

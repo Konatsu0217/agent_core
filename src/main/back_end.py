@@ -28,6 +28,10 @@ from src.agent.storage.sqlite_agent_profile_storage import SQLiteAgentProfileSto
 from src.infrastructure.config.config_manager import ConfigManager
 from src.infrastructure.utils.connet_manager import get_ws_manager
 from src.main.session_orchestrator import SessionOrchestrator
+from src.infrastructure.clients.bilibili_live_client.danmaku_bridge import (
+    init_danmaku_bridge, get_danmaku_bridge
+)
+from pydantic import BaseModel, Field
 from src.infrastructure.logging.logger import get_logger
 from src.context.manager import get_context_manager
 
@@ -56,6 +60,12 @@ async def lifespan(app: FastAPI):
     container.register("session_service", DefaultSessionService())
     logger.info("所有服务注册完成")
 
+    # 初始化工具管理器（加载远程 MCP 工具 + 内置技能如 websearch）
+    tool_manager: McpToolManager = container.get("tool_manager")
+    if tool_manager:
+        await tool_manager.initialize()
+        logger.info("工具管理器初始化完成（内置技能已加载）")
+
     # 创建工作流引擎
     workflow_engine = AgentCoordinator()
 
@@ -83,10 +93,52 @@ async def lifespan(app: FastAPI):
     app.state.ws_manager = ws_manager
     app.state.agent_profile_storage = agent_profile_storage
 
+    # 初始化弹幕桥接模块（根据配置决定是否启用）
+    danmaku_cfg = ConfigManager.get_danmaku_config()
+    if danmaku_cfg and danmaku_cfg.get('enabled', False):
+        danmaku_bridge = init_danmaku_bridge(
+            agent_id=danmaku_cfg.get('agent_id', 'fast_agent_v1'),
+            bucket_capacity=danmaku_cfg.get('bucket_capacity', 20),
+            bucket_lifetime=danmaku_cfg.get('bucket_lifetime', 8.0),
+        )
+        danmaku_bridge.bind_orchestrator(orchestrator)
+        ws_manager.register_broadcast_session(danmaku_bridge._broadcast_session_id)
+        await danmaku_bridge.start()
+        app.state.danmaku_bridge = danmaku_bridge
+        logger.info("弹幕桥接模块已启用并启动")
+
+        # 如果配置了 B站直播客户端，自动启动监听
+        bili_cfg = danmaku_cfg.get('bili_live')
+        if bili_cfg and bili_cfg.get('id_code') and bili_cfg.get('app_id'):
+            from src.infrastructure.clients.bilibili_live_client.ws import BiliClient
+            import threading
+
+            def _run_bili_client():
+                try:
+                    cli = BiliClient(
+                        idCode=bili_cfg['id_code'],
+                        appId=bili_cfg['app_id'],
+                        key=bili_cfg.get('key', ''),
+                        secret=bili_cfg.get('secret', ''),
+                        host=bili_cfg.get('host', 'https://live-open.biliapi.com'),
+                        on_danmaku=danmaku_bridge.push_danmaku,
+                    )
+                    with cli:
+                        cli.run()
+                except Exception as e:
+                    logger.error(f"B站直播客户端启动失败: {e}")
+
+            bili_thread = threading.Thread(target=_run_bili_client, daemon=True, name="bili-live-client")
+            bili_thread.start()
+            logger.info(f"B站直播客户端已启动，监听主播: {bili_cfg['id_code']}")
+    else:
+        logger.info("弹幕桥接未启用，如需开启请设置 config/core.json 中 danmaku_config.enabled=true")
+
     yield
 
     # 清理
-    # await event_bus.close()
+    if hasattr(app.state, 'danmaku_bridge'):
+        await app.state.danmaku_bridge.stop()
 
 
 # 创建FastAPI应用
@@ -360,6 +412,68 @@ async def websocket_endpoint(websocket: WebSocket):
                 session_id,
                 DetachSessionPayload(session_id=session_id),
             )
+
+
+
+# ======================== 弹幕 API 接口 ========================
+
+class DanmakuPushRequest(BaseModel):
+    """弹幕推送请求"""
+    content: str = Field(..., description="弹幕内容")
+    danmu_type: str = Field(default="danmaku", description="弹幕类型: danmaku/super_chat/gift/buy_guard")
+    uname: str = Field(default="匿名", description="发送者用户名")
+
+
+@app.post("/api/danmaku/push", summary="推送弹幕消息")
+async def push_danmaku(data: DanmakuPushRequest = Body(...)):
+    """
+    接收弹幕消息并送入聚合队列。
+
+    普通弹幕进双桶聚合，桶满/超时后合并发送给 LLM。
+    付费消息（super_chat/gift/buy_guard）走优先队列直接发送。
+    LLM 响应会广播到所有连接的 WebSocket 客户端。
+    """
+    bridge = get_danmaku_bridge()
+    bridge.push_danmaku(
+        content=data.content,
+        danmu_type=data.danmu_type,
+        uname=data.uname,
+    )
+    return {
+        "success": True,
+        "message": f"弹幕已接收 ({data.danmu_type})",
+        "danmu_type": data.danmu_type,
+    }
+
+
+@app.get("/api/consumption-status", summary="查询弹幕消费状态")
+async def consumption_status():
+    """
+    返回当前弹幕消费状态（LLM 是否空闲，是否可以消费新弹幕）。
+    供 danmaku_proxy_server 或外部服务轮询使用。
+    """
+    bridge = get_danmaku_bridge()
+    return bridge.get_consumption_status()
+
+
+@app.post("/api/danmaku/consume", summary="直接消费弹幕（来自 proxy server）")
+async def consume_danmaku(data: dict = Body(...)):
+    """
+    接收 danmaku_proxy_server 聚合后的弹幕消息并直接发送给 LLM。
+    这是兼容 danmaku_proxy_server 的接口。
+    """
+    bridge = get_danmaku_bridge()
+    content = data.get("content", "")
+    danmu_type = data.get("danmu_type", "danmaku")
+    priority = data.get("priority", "normal")
+
+    if not content:
+        raise HTTPException(status_code=400, detail="content is required")
+
+    # 直接作为聚合消息发送（不再走双桶）
+    bridge.push_danmaku(content=content, danmu_type=danmu_type, uname="直播间观众")
+
+    return {"success": True, "message": "弹幕已送入消费队列"}
 
 
 if __name__ == "__main__":

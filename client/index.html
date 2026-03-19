@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Amadues - Live2D Virtual Streamer</title>
+  <link rel="stylesheet" href="/src/style.css" />
+  <!-- Live2D Cubism 4 Core (必须在 pixi-live2d-display 之前加载) -->
+  <script src="/live2dcubismcore.min.js"></script>
+</head>
+<body>
+  <div id="app">
+    <!-- 顶部状态栏 -->
+    <header id="header">
+      <div class="header-left">
+        <h1 class="title">Amadues</h1>
+        <span class="tag">Live2D Virtual Streamer</span>
+      </div>
+      <div class="header-right">
+        <div id="status" class="status status-disconnected">未连接</div>
+      </div>
+    </header>
+
+    <!-- 主体区域 -->
+    <main id="main">
+      <!-- 左侧：Live2D 展示区 -->
+      <section id="stage">
+        <div id="live2d-container"></div>
+        <!-- 字幕 -->
+        <div id="subtitle" class="subtitle-container"></div>
+      </section>
+
+      <!-- 右侧：控制面板 -->
+      <aside id="panel">
+        <!-- 日志区域 -->
+        <div id="log-section">
+          <h3>事件日志</h3>
+          <div id="log"></div>
+        </div>
+
+        <!-- 输入区域 -->
+        <div id="input-section">
+          <input
+            id="user-input"
+            type="text"
+            placeholder="输入消息与虚拟主播对话..."
+            disabled
+            autocomplete="off"
+          />
+          <button id="send-btn" disabled>发送</button>
+        </div>
+      </aside>
+    </main>
+  </div>
+
+  <script type="module" src="/src/app.ts"></script>
+</body>
+</html>
